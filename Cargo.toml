@@ -1,0 +1,9 @@
+[package]
+name = "todiff"
+version = "0.1.0"
+authors = ["Léo Gaspard <leo@gaspard.io>"]
+
+[dependencies]
+clap = "2.31.1"
+todo-txt = "1.0.0"
+strsim = "0.7.0"

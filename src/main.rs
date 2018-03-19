@@ -7,6 +7,7 @@ use std::io::{BufRead, BufReader};
 use std::str::FromStr;
 use strsim::levenshtein;
 use todo_txt::Task;
+use todo_txt::Date as TaskDate;
 
 fn read_tasks(path: &str) -> Vec<Task> {
     let file = File::open(path).expect(&format!("Unable to open file ‘{}’", path));
@@ -24,6 +25,23 @@ fn read_tasks(path: &str) -> Vec<Task> {
 struct TaskChange {
     orig: Task,
     to: Vec<Task>,
+}
+
+enum Changes {
+    Completed(Option<TaskDate>),
+    Unknown,
+}
+
+fn changes(from: &Task, to: &Task) -> Changes {
+    if from.subject == to.subject && from.create_date == to.create_date &&
+            from.threshold_date == to.threshold_date && from.due_date == to.due_date &&
+            from.contexts == to.contexts && from.projects == to.projects &&
+            from.hashtags == to.hashtags && from.tags == to.tags && from.finish_date == None &&
+            from.finished == false && to.finished == true {
+        Changes::Completed(to.finish_date)
+    } else {
+        Changes::Unknown
+    }
 }
 
 fn main() {
@@ -83,7 +101,7 @@ fn main() {
         for t in new_tasks {
             println!(" → {}", t);
         }
-        println!("");
+        println!();
     }
     if changeset.is_empty() {
         println!("No changed tasks.\n");
@@ -94,10 +112,18 @@ fn main() {
             if t.to.is_empty() {
                 println!("    → Deleted task");
             } else {
+                let num_to = t.to.len();
                 for to in t.to {
-                    println!("    → {}", to);
+                    use Changes::*;
+                    match changes(&t.orig, &to) {
+                        Completed(Some(d)) => println!("    → Completed at {}", d),
+                        Completed(None) => println!("    → Completed (without date)"),
+                        Unknown if num_to == 1 => println!("    → Changed to ‘{}’", to),
+                        Unknown => println!("    → Copied and changed to ‘{}’", to),
+                    }
                 }
             }
+            println!();
         }
     }
 }

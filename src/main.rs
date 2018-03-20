@@ -30,6 +30,7 @@ struct TaskChange {
 }
 
 enum Changes {
+    Recurred,
     Copied,
 
     FinishedAt(TaskDate),
@@ -49,6 +50,7 @@ enum Changes {
 fn change_str(c: &Changes) -> String {
     use Changes::*;
     match *c {
+        Recurred => "recurred".to_owned(),
         Copied => "copied".to_owned(),
 
         FinishedAt(d) => format!("completed on {}", d),
@@ -98,39 +100,61 @@ fn change_str(c: &Changes) -> String {
     }
 }
 
+fn postpone_days(from: &Task, to: &Task) -> Option<Duration> {
+    if let Some(from_due) = from.due_date {
+        if let Some(to_due) = to.due_date {
+            if let Some(from_thresh) = from.threshold_date {
+                if let Some(to_thresh) = to.threshold_date {
+                    if to_due.signed_duration_since(from_due) ==
+                            to_thresh.signed_duration_since(from_thresh) {
+                        return Some(to_due.signed_duration_since(from_due));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn changes(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
     use Changes::*;
 
     let mut res = Vec::new();
+    let mut done_recurred = false;
     let mut done_finished_at = false;
     let mut done_postponed_strict = false;
 
+    // First, things that may trigger a removal of the `copied` item
+    /*
     if !is_first {
+        res.push(Recurred);
+        //done_recurred = true;
+    }
+    */
+
+    // Then, the `copied` item
+    if !done_recurred && !is_first {
         res.push(Copied);
     }
 
-    // First, the optimizations handling multiple changes at once
+    // Then, the optimizations handling multiple changes at once
     if from.finished == false && to.finished == true &&
             from.finish_date.is_none() && to.finish_date.is_some() {
         res.push(FinishedAt(to.finish_date.expect("Internal error E005")));
         done_finished_at = true;
     }
-    if from.due_date != to.due_date {
-        if let Some(to_thresh) = to.threshold_date { if let Some(from_thresh) = from.threshold_date {
-            if let Some(to_due) = to.due_date { if let Some(from_due) = from.due_date {
-                if to_due.signed_duration_since(from_due) == to_thresh.signed_duration_since(from_thresh) {
-                    res.push(PostponedStrictBy(to_due.signed_duration_since(from_due)));
-                    done_postponed_strict = true;
-                }
-            }}
-        }}
+    if !done_recurred && from.due_date != to.due_date {
+        if let Some(d) = postpone_days(from, to) {
+            res.push(PostponedStrictBy(d));
+            done_postponed_strict = true;
+        }
     }
 
     // And then add the changes that we couldn't cram into one of the optimized versions
-    if !done_postponed_strict && from.threshold_date != to.threshold_date {
+    if !done_recurred && !done_postponed_strict && from.threshold_date != to.threshold_date {
         res.push(ThresholdDate(from.threshold_date, to.threshold_date));
     }
-    if !done_postponed_strict && from.due_date != to.due_date {
+    if !done_recurred && !done_postponed_strict && from.due_date != to.due_date {
         res.push(DueDate(from.due_date, to.due_date));
     }
     if !done_finished_at && from.finished != to.finished {
@@ -156,7 +180,7 @@ fn changes(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
             res.push(Priority(from_prio, to_prio));
         }
     }
-    if from.create_date != to.create_date {
+    if !done_recurred && from.create_date != to.create_date {
         res.push(CreateDate(from.create_date, to.create_date));
     }
     if from.tags != to.tags {

@@ -1,7 +1,9 @@
+extern crate chrono;
 extern crate clap;
 extern crate strsim;
 extern crate todo_txt;
 
+use chrono::Duration;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
@@ -27,9 +29,11 @@ struct TaskChange {
     to: Vec<Task>,
 }
 
-// All the variants are of the form (before, after)
 enum Changes {
     FinishedAt(TaskDate),
+    PostponedStrictBy(Duration),
+
+    // All the variants below are of the form (before, after)
     Finished(bool), // The exception: bool has only two values, so only store after
     Priority(Option<char>, Option<char>),
     FinishDate(Option<TaskDate>, Option<TaskDate>),
@@ -44,6 +48,8 @@ fn change_str(c: &Changes) -> String {
     use Changes::*;
     match *c {
         FinishedAt(d) => format!("completed on {}", d),
+        PostponedStrictBy(d) => format!("postponed (strict) by {} days", d.num_days()),
+
         Finished(true) => "completed".to_owned(),
         Finished(false) => "uncompleted".to_owned(),
         Priority(_, None) => "priority removed".to_owned(),
@@ -92,26 +98,37 @@ fn changes(from: &Task, to: &Task) -> Vec<Changes> {
     use Changes::*;
 
     let mut res = Vec::new();
-    let mut finished_at = false;
+    let mut done_finished_at = false;
+    let mut done_postponed_strict = false;
 
     // First, the optimizations handling multiple changes at once
     if from.finished == false && to.finished == true &&
             from.finish_date.is_none() && to.finish_date.is_some() {
         res.push(FinishedAt(to.finish_date.expect("Internal error E005")));
-        finished_at = true;
+        done_finished_at = true;
+    }
+    if from.due_date != to.due_date {
+        if let Some(to_thresh) = to.threshold_date { if let Some(from_thresh) = from.threshold_date {
+            if let Some(to_due) = to.due_date { if let Some(from_due) = from.due_date {
+                if to_due.signed_duration_since(from_due) == to_thresh.signed_duration_since(from_thresh) {
+                    res.push(PostponedStrictBy(to_due.signed_duration_since(from_due)));
+                    done_postponed_strict = true;
+                }
+            }}
+        }}
     }
 
     // And then add the changes that we couldn't cram into one of the optimized versions
-    if from.threshold_date != to.threshold_date {
+    if !done_postponed_strict && from.threshold_date != to.threshold_date {
         res.push(ThresholdDate(from.threshold_date, to.threshold_date));
     }
-    if from.due_date != to.due_date {
+    if !done_postponed_strict && from.due_date != to.due_date {
         res.push(DueDate(from.due_date, to.due_date));
     }
-    if !finished_at && from.finished != to.finished {
+    if !done_finished_at && from.finished != to.finished {
         res.push(Finished(to.finished));
     }
-    if !finished_at && from.finish_date != to.finish_date {
+    if !done_finished_at && from.finish_date != to.finish_date {
         res.push(FinishDate(from.finish_date, to.finish_date));
     }
     if from.priority != to.priority {

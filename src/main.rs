@@ -1,8 +1,10 @@
+extern crate ansi_term;
 extern crate chrono;
 extern crate clap;
 extern crate strsim;
 extern crate todo_txt;
 
+use ansi_term::Colour::{Blue, Green, Red};
 use chrono::{Datelike, Duration};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -46,6 +48,15 @@ enum Changes {
     DueDate(Option<TaskDate>, Option<TaskDate>),
     ThresholdDate(Option<TaskDate>, Option<TaskDate>),
     Tags(Vec<(String, String)>, Vec<(String, String)>),
+}
+
+fn is_completion(c: &Changes) -> bool {
+    use Changes::*;
+    match *c {
+        FinishedAt(_) => true,
+        Finished(true) => true,
+        _ => false
+    }
 }
 
 fn change_str(c: &Changes) -> String {
@@ -295,7 +306,7 @@ fn main() {
     } else {
         println!("New tasks:");
         for t in new_tasks {
-            println!(" → {}", t);
+            println!(" → {}", Green.paint(format!("{}", t)));
         }
         println!();
     }
@@ -304,14 +315,23 @@ fn main() {
     } else {
         println!("Changed tasks:");
         for t in changeset {
-            println!(" → {}", t.orig);
             if t.to.is_empty() {
-                println!("    → Deleted task");
+                println!(" → {}", Red.paint(format!("{}", t.orig)));
+                println!("    → {}", "Deleted");
             } else {
-                for i in 0..t.to.len() {
-                    let to = &t.to[i];
+                let chgss = t.to.iter()
+                    .enumerate()
+                    .map(|(i, to)| changes(&t.orig, &to, i == 0))
+                    .collect::<Vec<_>>();
+
+                if chgss.iter().any(|chgs| chgs.iter().any(is_completion)) {
+                    println!(" → {}", Blue.paint(format!("{}", t.orig)));
+                } else {
+                    println!(" → {}", t.orig);
+                }
+
+                for chgs in chgss {
                     print!("    → ");
-                    let chgs = changes(&t.orig, &to, i == 0);
                     for c in 0..chgs.len() {
                         let chg = change_str(&chgs[c]);
                         if c == 0 {

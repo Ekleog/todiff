@@ -30,6 +30,8 @@ struct TaskChange {
 }
 
 enum Changes {
+    Copied,
+
     FinishedAt(TaskDate),
     PostponedStrictBy(Duration),
 
@@ -47,6 +49,8 @@ enum Changes {
 fn change_str(c: &Changes) -> String {
     use Changes::*;
     match *c {
+        Copied => "copied".to_owned(),
+
         FinishedAt(d) => format!("completed on {}", d),
         PostponedStrictBy(d) => format!("postponed (strict) by {} days", d.num_days()),
 
@@ -94,12 +98,16 @@ fn change_str(c: &Changes) -> String {
     }
 }
 
-fn changes(from: &Task, to: &Task) -> Vec<Changes> {
+fn changes(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
     use Changes::*;
 
     let mut res = Vec::new();
     let mut done_finished_at = false;
     let mut done_postponed_strict = false;
+
+    if !is_first {
+        res.push(Copied);
+    }
 
     // First, the optimizations handling multiple changes at once
     if from.finished == false && to.finished == true &&
@@ -233,10 +241,10 @@ fn main() {
             if t.to.is_empty() {
                 println!("    → Deleted task");
             } else {
-                let num_to = t.to.len();
-                for to in t.to {
+                for i in 0..t.to.len() {
+                    let to = &t.to[i];
                     print!("    → ");
-                    let chgs = changes(&t.orig, &to);
+                    let chgs = changes(&t.orig, &to, i == 0);
                     for c in 0..chgs.len() {
                         let chg = change_str(&chgs[c]);
                         if c == 0 {

@@ -64,3 +64,14 @@ git commit -m "$(date -I)"
 This will automatically send you an email (provided your cron daemon is
 correctly configured) with all the task changes you did during the day, and
 commit the todo.txt file for backup as well as future use.
+
+If you have some archival (ie. a `done.txt` file) setup, you can do similar
+things, eg.
+```bash
+#!/bin/sh
+
+cd $MY_TODO_TXT_GIT_REPO
+git add todo.txt done.txt
+todiff <(git show HEAD:todo.txt HEAD:done.txt) <(git show :todo.txt :done.txt)
+git commit -m "$(date -I)"
+```

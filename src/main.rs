@@ -105,6 +105,9 @@ fn change_str(c: &Changes) -> String {
 fn postpone_days(from: &Task, to: &Task) -> Option<Duration> {
     if let Some(from_due) = from.due_date {
         if let Some(to_due) = to.due_date {
+            if from.threshold_date == None && to.threshold_date == None {
+                return Some(to_due.signed_duration_since(from_due));
+            }
             if let Some(from_thresh) = from.threshold_date {
                 if let Some(to_thresh) = to.threshold_date {
                     if to_due.signed_duration_since(from_due) ==

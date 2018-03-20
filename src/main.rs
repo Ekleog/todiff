@@ -3,15 +3,19 @@ extern crate atty;
 extern crate chrono;
 extern crate clap;
 extern crate strsim;
+extern crate multiset;
 extern crate todo_txt;
 
 use ansi_term::ANSIString;
 use ansi_term::Color;
 use ansi_term::Color::{Blue, Green, Red};
 use chrono::{Datelike, Duration};
+use multiset::HashMultiSet;
 use std::env;
 use std::fs::File;
+use std::hash::Hash;
 use std::io::{BufRead, BufReader};
+use std::iter::FromIterator;
 use std::str::FromStr;
 use strsim::levenshtein;
 use todo_txt::Task;
@@ -269,14 +273,25 @@ fn changes(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
     res
 }
 
-fn remove_common<T: Clone + Eq>(a: &mut Vec<T>, b: &mut Vec<T>) {
-    for x in a.clone().into_iter() {
-        if let Some(b_pos) = b.iter().position(|y| *y == x) {
-            b.remove(b_pos);
-            let a_pos = a.iter().position(|y| *y == x).expect("Internal error E003");
-            a.remove(a_pos);
+
+fn remove_common<T: Clone + Eq + Hash>(a: &mut Vec<T>, b: &mut Vec<T>) {
+    let mut a_set: HashMultiSet<T> = FromIterator::from_iter(a.clone().into_iter());
+    let mut b_set: HashMultiSet<T> = FromIterator::from_iter(b.clone().into_iter());
+
+    a.retain(|x: &T| {
+        if b_set.count_of(x.clone()) == 0 {
+            return true;
         }
-    }
+        b_set.remove_times(x.clone(), 1);
+        return false;
+    });
+    b.retain(|x: &T| {
+        if a_set.count_of(x.clone()) == 0 {
+            return true;
+        }
+        a_set.remove_times(x.clone(), 1);
+        return false;
+    });
 }
 
 fn main() {

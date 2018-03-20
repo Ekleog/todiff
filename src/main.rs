@@ -27,34 +27,42 @@ struct TaskChange {
     to: Vec<Task>,
 }
 
+// All the variants are of the form (before, after)
 enum Changes {
-    Finished(bool),
-    Priority(Option<char>),
-    FinishDate(Option<TaskDate>),
-    CreateDate(Option<TaskDate>),
-    Subject(String),
-    DueDate(Option<TaskDate>),
-    ThresholdDate(Option<TaskDate>),
-    Tags((Vec<(String, String)>, Vec<(String, String)>)),
+    FinishedAt(TaskDate),
+    Finished(bool), // The exception: bool has only two values, so only store after
+    Priority(Option<char>, Option<char>),
+    FinishDate(Option<TaskDate>, Option<TaskDate>),
+    CreateDate(Option<TaskDate>, Option<TaskDate>),
+    Subject(String, String),
+    DueDate(Option<TaskDate>, Option<TaskDate>),
+    ThresholdDate(Option<TaskDate>, Option<TaskDate>),
+    Tags(Vec<(String, String)>, Vec<(String, String)>),
 }
 
 fn change_str(c: &Changes) -> String {
     use Changes::*;
     match *c {
+        FinishedAt(d) => format!("completed on {}", d),
         Finished(true) => "completed".to_owned(),
         Finished(false) => "uncompleted".to_owned(),
-        Priority(None) => "priority removed".to_owned(),
-        Priority(Some(c)) => format!("priority set to ({})", c),
-        FinishDate(None) => "completion date removed".to_owned(),
-        FinishDate(Some(d)) => format!("completion date set to {}", d),
-        CreateDate(None) => "creation date removed".to_owned(),
-        CreateDate(Some(d)) => format!("creation date set to {}", d),
-        Subject(ref s) => format!("subject set to ‘{}’", s),
-        DueDate(None) => "due date removed".to_owned(),
-        DueDate(Some(d)) => format!("due date set to {}", d),
-        ThresholdDate(None) => "threshold date removed".to_owned(),
-        ThresholdDate(Some(d)) => format!("threshold date set to {}", d),
-        Tags((ref a, ref b)) => {
+        Priority(_, None) => "priority removed".to_owned(),
+        Priority(None, Some(c)) => format!("priority added at ({})", c),
+        Priority(Some(_), Some(b)) => format!("priority set to ({})", b),
+        FinishDate(_, None) => "completion date removed".to_owned(),
+        FinishDate(None, Some(d)) => format!("completion date added at {}", d),
+        FinishDate(Some(_), Some(d)) => format!("completion date set to {}", d),
+        CreateDate(_, None) => "creation date removed".to_owned(),
+        CreateDate(None, Some(d)) => format!("creation date added at {}", d),
+        CreateDate(Some(_), Some(d)) => format!("creation date set to {}", d),
+        Subject(_, ref s) => format!("subject set to ‘{}’", s),
+        DueDate(_, None) => "due date removed".to_owned(),
+        DueDate(None, Some(d)) => format!("due date added at {}", d),
+        DueDate(Some(_), Some(d)) => format!("due date set to {}", d),
+        ThresholdDate(_, None) => "threshold date removed".to_owned(),
+        ThresholdDate(None, Some(d)) => format!("threshold date added at {}", d),
+        ThresholdDate(Some(_), Some(d)) => format!("threshold date set to {}", d),
+        Tags(ref a, ref b) => {
             let mut res = String::new();
             if a.len() == 1 {
                 res += "removed tag ";
@@ -84,36 +92,54 @@ fn changes(from: &Task, to: &Task) -> Vec<Changes> {
     use Changes::*;
 
     let mut res = Vec::new();
+    let mut finished_at = false;
+
+    // First, the optimizations handling multiple changes at once
+    if from.finished == false && to.finished == true &&
+            from.finish_date.is_none() && to.finish_date.is_some() {
+        res.push(FinishedAt(to.finish_date.expect("Internal error E005")));
+        finished_at = true;
+    }
+
+    // And then add the changes that we couldn't cram into one of the optimized versions
     if from.threshold_date != to.threshold_date {
-        res.push(ThresholdDate(to.threshold_date));
+        res.push(ThresholdDate(from.threshold_date, to.threshold_date));
     }
     if from.due_date != to.due_date {
-        res.push(DueDate(to.due_date));
+        res.push(DueDate(from.due_date, to.due_date));
     }
-    if from.finished != to.finished {
+    if !finished_at && from.finished != to.finished {
         res.push(Finished(to.finished));
     }
-    if from.finish_date != to.finish_date {
-        res.push(FinishDate(to.finish_date));
+    if !finished_at && from.finish_date != to.finish_date {
+        res.push(FinishDate(from.finish_date, to.finish_date));
     }
     if from.priority != to.priority {
-        if to.priority < 26 {
-            res.push(Priority(Some((b'A' + to.priority) as char)));
+        let from_prio;
+        if from.priority < 26 {
+            from_prio = Some((b'A' + from.priority) as char);
         } else {
-            res.push(Priority(None));
+            from_prio = None;
         }
+        let to_prio;
+        if to.priority < 26 {
+            to_prio = Some((b'A' + to.priority) as char);
+        } else {
+            to_prio = None;
+        }
+        res.push(Priority(from_prio, to_prio));
     }
     if from.create_date != to.create_date {
-        res.push(CreateDate(to.create_date));
+        res.push(CreateDate(from.create_date, to.create_date));
     }
     if from.tags != to.tags {
         let mut from_t = from.tags.iter().map(|(a, b)| (a.clone(), b.clone())).collect::<Vec<(String, String)>>();
         let mut to_t = to.tags.iter().map(|(a, b)| (a.clone(), b.clone())).collect::<Vec<(String, String)>>();
         remove_common(&mut from_t, &mut to_t);
-        res.push(Tags((from_t, to_t)));
+        res.push(Tags(from_t, to_t));
     }
     if from.subject != to.subject {
-        res.push(Subject(to.subject.clone()));
+        res.push(Subject(from.subject.clone(), to.subject.clone()));
     }
     res
 }
@@ -203,7 +229,7 @@ fn main() {
                         } else {
                             print!("{}", chg);
                         }
-                        if c < chgs.len() - 2 {
+                        if c < chgs.len().saturating_sub(2) {
                             print!(", ");
                         } else if c == chgs.len() - 2 {
                             print!(" and ");

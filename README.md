@@ -13,6 +13,8 @@ that eg. crons can be used to periodically diff.
 ## Example usage
 
 ```
+$ # `git diff` is not really readable…
+
 $ git diff
 diff --git a/todo.txt b/todo.txt
 index 547d201..66caa7e 100644
@@ -24,6 +26,8 @@ index 547d201..66caa7e 100644
 +2018-03-20 Take over the world t:2022-02-05 due:2033-03-06
 +(A) 2018-03-20 Call mom due:2018-03-25
 +2018-03-20 Be happy t:2099-09-09
+
+$ # But with todiff it's quite better!
 
 $ git difftool -x todiff -y
 New tasks:

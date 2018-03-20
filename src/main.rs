@@ -3,7 +3,7 @@ extern crate clap;
 extern crate strsim;
 extern crate todo_txt;
 
-use chrono::Duration;
+use chrono::{Datelike, Duration};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
@@ -30,8 +30,9 @@ struct TaskChange {
 }
 
 enum Changes {
-    Recurred,
     Copied,
+    RecurredStrict,
+    RecurredFrom(TaskDate),
 
     FinishedAt(TaskDate),
     PostponedStrictBy(Duration),
@@ -50,8 +51,9 @@ enum Changes {
 fn change_str(c: &Changes) -> String {
     use Changes::*;
     match *c {
-        Recurred => "recurred".to_owned(),
         Copied => "copied".to_owned(),
+        RecurredStrict => "recurred (strict)".to_owned(),
+        RecurredFrom(d) => format!("recurred (from {})", d),
 
         FinishedAt(d) => format!("completed on {}", d),
         PostponedStrictBy(d) => format!("postponed (strict) by {} days", d.num_days()),
@@ -116,6 +118,27 @@ fn postpone_days(from: &Task, to: &Task) -> Option<Duration> {
     None
 }
 
+fn add_recspec_to_date(date: TaskDate, recspec: &str) -> Option<TaskDate> {
+    let mut n = recspec.to_owned();
+    n.pop();
+    if let Ok(n) = n.parse::<u16>() {
+        match recspec.chars().last() {
+            Some('d') => Some(date + Duration::days(n as i64)),
+            Some('w') => Some(date + Duration::weeks(n as i64)),
+            Some('m') =>
+                Some(date.with_month0((date.month0() + n as u32) % 12)
+                         .expect("Internal error E006")
+                         .with_year(date.year() + ((date.month0() + n as u32) / 12) as i32)
+                         .expect("Internal error E007")),
+            Some('y') => Some(date.with_year(date.year() + n as i32)
+                                  .expect("Internal error E008")),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
 fn changes(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
     use Changes::*;
 
@@ -125,12 +148,27 @@ fn changes(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
     let mut done_postponed_strict = false;
 
     // First, things that may trigger a removal of the `copied` item
-    /*
-    if !is_first {
-        res.push(Recurred);
-        //done_recurred = true;
+    if !is_first && from.tags.get("rec") == to.tags.get("rec") {
+        if let (Some(r), Some(_), Some(from_due), Some(to_due)) =
+                (from.tags.get("rec"), postpone_days(from, to), from.due_date, to.due_date) {
+            if r.chars().next() == Some('+') {
+                let mut c = r.chars();
+                c.next();
+                let r = c.collect::<String>();
+                if add_recspec_to_date(from_due, &r) == Some(to_due) {
+                    res.push(RecurredStrict);
+                    done_recurred = true;
+                }
+            } else {
+                if let Some(to_create) = to.create_date {
+                    if add_recspec_to_date(to_create, &r) == Some(to_due) {
+                        res.push(RecurredFrom(to_create));
+                        done_recurred = true;
+                    }
+                }
+            }
+        }
     }
-    */
 
     // Then, the `copied` item
     if !done_recurred && !is_first {

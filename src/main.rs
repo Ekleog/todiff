@@ -183,7 +183,7 @@ fn remove_common<T: Clone + Eq>(a: &mut Vec<T>, b: &mut Vec<T>) {
 
 fn main() {
     // Read arguments
-    let matches = clap::App::new("Todiff")
+    let matches = clap::App::new("todiff")
         .version("0.1.0")
         .author("Leo Gaspard <todiff@leo.gaspard.ninja>")
         .about("Diffs two todo.txt files")

@@ -70,7 +70,7 @@ fn change_str(c: &Changes) -> String {
         Subject(_, ref s) => format!("set subject to ‘{}’", s),
         DueDate(_, None) => "removed due date".to_owned(),
         DueDate(None, Some(d)) => format!("added due date {}", d),
-        DueDate(Some(_), Some(d)) => format!("set due date to {}", d),
+        DueDate(Some(_), Some(d)) => format!("postponed to {}", d),
         ThresholdDate(_, None) => "removed threshold date".to_owned(),
         ThresholdDate(None, Some(d)) => format!("added threshold date {}", d),
         ThresholdDate(Some(_), Some(d)) => format!("set threshold date to {}", d),

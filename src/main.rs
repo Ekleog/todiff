@@ -152,7 +152,9 @@ fn changes(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
         } else {
             to_prio = None;
         }
-        res.push(Priority(from_prio, to_prio));
+        if !(done_finished_at && to_prio.is_none()) {
+            res.push(Priority(from_prio, to_prio));
+        }
     }
     if from.create_date != to.create_date {
         res.push(CreateDate(from.create_date, to.create_date));

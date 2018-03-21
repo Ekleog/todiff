@@ -1,17 +1,39 @@
 extern crate ansi_term;
+extern crate atty;
 extern crate chrono;
 extern crate clap;
 extern crate strsim;
 extern crate todo_txt;
 
-use ansi_term::Colour::{Blue, Green, Red};
+use ansi_term::ANSIString;
+use ansi_term::Color;
+use ansi_term::Color::{Blue, Green, Red};
 use chrono::{Datelike, Duration};
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
 use strsim::levenshtein;
 use todo_txt::Task;
 use todo_txt::Date as TaskDate;
+
+
+fn is_a_tty() -> bool {
+    atty::is(atty::Stream::Stdout)
+}
+fn is_term_dumb() -> bool {
+    env::var("TERM").ok() == Some(String::from("dumb"))
+}
+
+fn color<T>(colorize: bool, color: Color, e: &T) -> ansi_term::ANSIGenericString<str>
+        where T: std::fmt::Display {
+    let e_str = format!("{}", e);
+    if colorize {
+        color.paint(e_str)
+    } else {
+        ANSIString::from(e_str)
+    }
+}
 
 fn read_tasks(path: &str) -> Vec<Task> {
     let file = File::open(path).expect(&format!("Unable to open file ‘{}’", path));
@@ -263,10 +285,25 @@ fn main() {
         .version("0.1.0")
         .author("Leo Gaspard <todiff@leo.gaspard.ninja>")
         .about("Diffs two todo.txt files")
-        .args_from_usage(
-            "<BEFORE>     'The file to diff from'
-            <AFTER>        'The file to diff to'")
+        .args_from_usage("
+            <BEFORE>        'The file to diff from'
+            <AFTER>         'The file to diff to'
+        ")
+        .arg(clap::Arg::with_name("color")
+            .long("color")
+            .takes_value(true)
+            .possible_values(&["auto", "always", "never"])
+            .default_value("auto")
+            .help("Colorize the output"))
         .get_matches();
+
+    let color_option = matches.value_of("color").expect("Internal error E009");
+    let colorize = match color_option {
+        "never" => false,
+        "always" => true,
+        "auto" => is_a_tty() && !is_term_dumb(),
+        _ => panic!("Internal error E010")
+    };
 
     // Read files
     let mut from = read_tasks(matches.value_of("BEFORE").expect("Internal error E001"));
@@ -306,7 +343,7 @@ fn main() {
     } else {
         println!("New tasks:");
         for t in new_tasks {
-            println!(" → {}", Green.paint(format!("{}", t)));
+            println!(" → {}", color(colorize, Green, &t));
         }
         println!();
     }
@@ -316,19 +353,16 @@ fn main() {
         println!("Changed tasks:");
         for t in changeset {
             if t.to.is_empty() {
-                println!(" → {}", Red.paint(format!("{}", t.orig)));
+                println!(" → {}", color(colorize, Red, &t.orig));
                 println!("    → {}", "Deleted");
             } else {
                 let chgss = t.to.iter()
                     .enumerate()
                     .map(|(i, to)| changes(&t.orig, &to, i == 0))
-                    .collect::<Vec<_>>();
+                    .collect::<Vec<Vec<_>>>();
 
-                if chgss.iter().any(|chgs| chgs.iter().any(is_completion)) {
-                    println!(" → {}", Blue.paint(format!("{}", t.orig)));
-                } else {
-                    println!(" → {}", t.orig);
-                }
+                let has_been_completed = chgss.iter().flat_map(|chgs| chgs).any(is_completion);
+                println!(" → {}", color(colorize && has_been_completed, Blue, &t.orig));
 
                 for chgs in chgss {
                     print!("    → ");

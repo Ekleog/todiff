@@ -279,6 +279,10 @@ fn remove_common<T: Clone + Eq>(a: &mut Vec<T>, b: &mut Vec<T>) {
     }
 }
 
+fn has_been_completed(chgs: &Vec<Vec<Changes>>) -> bool {
+    chgs.iter().flat_map(|chgs| chgs).any(is_completion)
+}
+
 fn main() {
     // Read arguments
     let matches = clap::App::new("todiff")
@@ -337,6 +341,16 @@ fn main() {
         }
     }
 
+    // Retrieve changes
+    let changes = changeset.into_iter()
+        .map(|t| {
+            let changes = t.to.iter()
+                .enumerate()
+                .map(|(i, to)| changes(&t.orig, &to, i == 0)).collect();
+            (t.orig, changes)
+        })
+        .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
+
     // Nice display
     if new_tasks.is_empty() {
         println!("No new tasks.\n");
@@ -347,37 +361,32 @@ fn main() {
         }
         println!();
     }
-    if changeset.is_empty() {
+    if changes.is_empty() {
         println!("No changed tasks.\n");
     } else {
         println!("Changed tasks:");
-        for t in changeset {
-            if t.to.is_empty() {
-                println!(" → {}", color(colorize, Red, &t.orig));
+        for (orig, chgs) in changes {
+            if chgs.is_empty() {
+                println!(" → {}", color(colorize, Red, &orig));
                 println!("    → {}", "Deleted");
             } else {
-                let chgss = t.to.iter()
-                    .enumerate()
-                    .map(|(i, to)| changes(&t.orig, &to, i == 0))
-                    .collect::<Vec<Vec<_>>>();
+                println!(" → {}", color(colorize && has_been_completed(&chgs), Blue, &orig));
 
-                let has_been_completed = chgss.iter().flat_map(|chgs| chgs).any(is_completion);
-                println!(" → {}", color(colorize && has_been_completed, Blue, &t.orig));
-
-                for chgs in chgss {
+                for chgs_for_me in chgs {
                     print!("    → ");
-                    for c in 0..chgs.len() {
-                        let chg = change_str(&chgs[c]);
+                    for c in 0..chgs_for_me.len() {
+                        let chg = change_str(&chgs_for_me[c]);
                         if c == 0 {
-                            let mut chrs = chg.chars();
-                            let first_chr = chrs.next().expect("Internal error E004").to_uppercase();
-                            print!("{}{}", first_chr, chrs.as_str());
+                            let mut chars = chg.chars();
+                            let first_char = chars.next().expect("Internal error E004")
+                                .to_uppercase();
+                            print!("{}{}", first_char, chars.as_str());
                         } else {
                             print!("{}", chg);
                         }
-                        if c < chgs.len().saturating_sub(2) {
+                        if c < chgs_for_me.len().saturating_sub(2) {
                             print!(", ");
-                        } else if c == chgs.len() - 2 {
+                        } else if c == chgs_for_me.len() - 2 {
                             print!(" and ");
                         }
                     }

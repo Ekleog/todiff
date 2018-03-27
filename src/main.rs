@@ -342,7 +342,7 @@ fn main() {
     }
 
     // Retrieve changes
-    let changes = changeset.into_iter()
+    let mut changes = changeset.into_iter()
         .map(|t| {
             let changes = t.to.iter()
                 .enumerate()
@@ -350,6 +350,14 @@ fn main() {
             (t.orig, changes)
         })
         .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
+
+    // Sort tasks
+    new_tasks.sort_by_key(|x| x.create_date);
+    changes.sort_by_key(|&(_, ref chgs)| {
+        if has_been_completed(chgs) { 1 }
+        else if chgs.is_empty() { 2 }
+        else { 3 }
+    });
 
     // Nice display
     if new_tasks.is_empty() {

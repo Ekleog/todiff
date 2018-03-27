@@ -7,7 +7,7 @@ extern crate todo_txt;
 
 use ansi_term::ANSIString;
 use ansi_term::Color;
-use ansi_term::Color::{Blue, Green, Red};
+use ansi_term::Color::{Blue, Green, Red, Yellow};
 use chrono::{Datelike, Duration};
 use std::env;
 use std::fs::File;
@@ -86,6 +86,15 @@ fn is_completion(c: &Changes) -> bool {
     match *c {
         FinishedAt(_) => true,
         Finished(true) => true,
+        _ => false,
+    }
+}
+
+fn is_postponed(c: &Changes) -> bool {
+    use Changes::*;
+    match *c {
+        PostponedStrictBy(_) => true,
+        DueDate(Some(_), Some(_)) => true,
         _ => false,
     }
 }
@@ -288,12 +297,16 @@ fn remove_common<T: Clone + Eq>(a: &mut Vec<T>, b: &mut Vec<T>) {
     }
 }
 
+fn has_been_recurred(chgs: &Vec<Vec<Changes>>) -> bool {
+    chgs.iter().flat_map(|c| c).any(is_recurred)
+}
+
 fn has_been_completed(chgs: &Vec<Vec<Changes>>) -> bool {
     chgs.iter().flat_map(|c| c).any(is_completion)
 }
 
-fn has_been_recurred(chgs: &Vec<Vec<Changes>>) -> bool {
-    chgs.iter().flat_map(|c| c).any(is_recurred)
+fn has_been_postponed(chgs: &Vec<Vec<Changes>>) -> bool {
+    chgs.iter().flat_map(|c| c).any(is_postponed)
 }
 
 fn main() {
@@ -367,10 +380,11 @@ fn main() {
     // Sort tasks
     new_tasks.sort_by_key(|x| x.create_date);
     changes.sort_by_key(|&(_, ref chgs)| {
-        if has_been_recurred(chgs) { 0 }
-        else if has_been_completed(chgs) { 1 }
-        else if chgs.is_empty() { 2 }
-        else { 3 }
+        if has_been_recurred(chgs) { 100 }
+        else if has_been_completed(chgs) { 200 }
+        else if has_been_postponed(chgs) { 300 }
+        else if chgs.is_empty() { 400 }
+        else { 500 }
     });
 
     // Nice display
@@ -396,6 +410,8 @@ fn main() {
                     println!(" → {}", color(colorize, Green, &orig));
                 } else if has_been_completed(&chgs) {
                     println!(" → {}", color(colorize, Blue, &orig));
+                } else if has_been_postponed(&chgs) {
+                    println!(" → {}", color(colorize, Yellow, &orig));
                 } else {
                     println!(" → {}", orig);
                 }

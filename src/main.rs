@@ -72,12 +72,21 @@ enum Changes {
     Tags(Vec<(String, String)>, Vec<(String, String)>),
 }
 
+fn is_recurred(c: &Changes) -> bool {
+    use Changes::*;
+    match *c {
+        RecurredStrict => true,
+        RecurredFrom(_) => true,
+        _ => false,
+    }
+}
+
 fn is_completion(c: &Changes) -> bool {
     use Changes::*;
     match *c {
         FinishedAt(_) => true,
         Finished(true) => true,
-        _ => false
+        _ => false,
     }
 }
 
@@ -280,7 +289,11 @@ fn remove_common<T: Clone + Eq>(a: &mut Vec<T>, b: &mut Vec<T>) {
 }
 
 fn has_been_completed(chgs: &Vec<Vec<Changes>>) -> bool {
-    chgs.iter().flat_map(|chgs| chgs).any(is_completion)
+    chgs.iter().flat_map(|c| c).any(is_completion)
+}
+
+fn has_been_recurred(chgs: &Vec<Vec<Changes>>) -> bool {
+    chgs.iter().flat_map(|c| c).any(is_recurred)
 }
 
 fn main() {
@@ -354,7 +367,8 @@ fn main() {
     // Sort tasks
     new_tasks.sort_by_key(|x| x.create_date);
     changes.sort_by_key(|&(_, ref chgs)| {
-        if has_been_completed(chgs) { 1 }
+        if has_been_recurred(chgs) { 0 }
+        else if has_been_completed(chgs) { 1 }
         else if chgs.is_empty() { 2 }
         else { 3 }
     });
@@ -378,7 +392,13 @@ fn main() {
                 println!(" → {}", color(colorize, Red, &orig));
                 println!("    → {}", "Deleted");
             } else {
-                println!(" → {}", color(colorize && has_been_completed(&chgs), Blue, &orig));
+                if has_been_recurred(&chgs) {
+                    println!(" → {}", color(colorize, Green, &orig));
+                } else if has_been_completed(&chgs) {
+                    println!(" → {}", color(colorize, Blue, &orig));
+                } else {
+                    println!(" → {}", orig);
+                }
 
                 for chgs_for_me in chgs {
                     print!("    → ");

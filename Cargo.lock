@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "todiff"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "ansi_term 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "atty 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",

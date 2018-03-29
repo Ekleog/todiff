@@ -1,3 +1,10 @@
+/*
+ * Copyright 2018 Leo Gaspard <todiff@leo.gaspard.ninja>
+ * Copyright 2018 Guillaume Boisseau <nadrieril@gmail.com>
+ *
+ * Licensed under the MIT license, see LICENSE.
+ */
+
 extern crate ansi_term;
 extern crate atty;
 extern crate chrono;

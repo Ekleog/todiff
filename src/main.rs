@@ -319,7 +319,7 @@ fn has_been_postponed(chgs: &Vec<Vec<Changes>>) -> bool {
 fn main() {
     // Read arguments
     let matches = clap::App::new("todiff")
-        .version("0.1.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .author("Leo Gaspard <todiff@leo.gaspard.ninja>")
         .about("Diffs two todo.txt files")
         .args_from_usage("

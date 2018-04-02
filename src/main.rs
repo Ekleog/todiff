@@ -332,6 +332,15 @@ fn main() {
             .possible_values(&["auto", "always", "never"])
             .default_value("auto")
             .help("Colorize the output"))
+        .arg(clap::Arg::with_name("similarity")
+             .long("similarity")
+             .takes_value(true)
+             .validator(|s| s.parse::<usize>()
+                             .map_err(|e| format!("{}", e))
+                             .and_then(|x| if x <= 100 { Ok(()) }
+                                           else { Err("must be between 0 and 100".to_owned()) }))
+             .default_value("50")
+             .help("Similarity index to consider two tasks identical (in percents, higher is more restrictive)"))
         .get_matches();
 
     let color_option = matches.value_of("color").expect("Internal error E009");
@@ -341,6 +350,10 @@ fn main() {
         "auto" => is_a_tty() && !is_term_dumb(),
         _ => panic!("Internal error E010")
     };
+
+    let similarity_option = matches.value_of("similarity").expect("Internal error E011");
+    let similarity = similarity_option.parse::<usize>().expect("Internal error E012");
+    let allowed_divergence = 100 - similarity;
 
     // Read files
     let mut from = read_tasks(matches.value_of("BEFORE").expect("Internal error E001"));
@@ -363,10 +376,11 @@ fn main() {
     for x in to.into_iter() {
         let best_match = changeset.iter_mut()
             .min_by_key(|t| levenshtein(&t.orig.subject, &x.subject))
-            .and_then(|t|
-                if levenshtein(&t.orig.subject, &x.subject) * 100 / t.orig.subject.len() < 50 { Some(t) }
+            .and_then(|t| {
+                let distance = levenshtein(&t.orig.subject, &x.subject);
+                if distance * 100 / t.orig.subject.len() < allowed_divergence { Some(t) }
                 else { None }
-            );
+            });
         if let Some(best) = best_match {
             best.to.push(x);
         } else {

@@ -339,7 +339,7 @@ fn main() {
                              .map_err(|e| format!("{}", e))
                              .and_then(|x| if x <= 100 { Ok(()) }
                                            else { Err("must be between 0 and 100".to_owned()) }))
-             .default_value("50")
+             .default_value("75")
              .help("Similarity index to consider two tasks identical (in percents, higher is more restrictive)"))
         .get_matches();
 

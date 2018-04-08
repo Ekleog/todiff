@@ -60,7 +60,9 @@ struct TaskChange {
     to: Vec<Task>,
 }
 
+#[derive(Clone)]
 enum Changes {
+    Created,
     Copied,
     RecurredStrict,
     RecurredFrom(TaskDate),
@@ -109,6 +111,7 @@ fn is_postponed(c: &Changes) -> bool {
 fn change_str(c: &Changes) -> String {
     use Changes::*;
     match *c {
+        Created => "created".to_owned(),
         Copied => "copied".to_owned(),
         RecurredStrict => "recurred (strict)".to_owned(),
         RecurredFrom(d) => format!("recurred (from {})", d),
@@ -200,7 +203,7 @@ fn add_recspec_to_date(date: TaskDate, recspec: &str) -> Option<TaskDate> {
     }
 }
 
-fn changes(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
+fn changes_between(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
     use Changes::*;
 
     let mut res = Vec::new();
@@ -316,6 +319,34 @@ fn has_been_postponed(chgs: &Vec<Vec<Changes>>) -> bool {
     chgs.iter().flat_map(|c| c).any(is_postponed)
 }
 
+fn uncomplete(t: &Task) -> Task {
+    let mut res = t.clone();
+    res.finished = false;
+    res.finish_date = None;
+    res
+}
+
+fn display_changes(chgs_for_me: Vec<Changes>) {
+    print!("    → ");
+    for c in 0..chgs_for_me.len() {
+        let chg = change_str(&chgs_for_me[c]);
+        if c == 0 {
+            let mut chars = chg.chars();
+            let first_char = chars.next().expect("Internal error E004")
+                .to_uppercase();
+            print!("{}{}", first_char, chars.as_str());
+        } else {
+            print!("{}", chg);
+        }
+        if c < chgs_for_me.len().saturating_sub(2) {
+            print!(", ");
+        } else if c == chgs_for_me.len() - 2 {
+            print!(" and ");
+        }
+    }
+    println!();
+}
+
 fn main() {
     // Read arguments
     let matches = clap::App::new("todiff")
@@ -393,7 +424,7 @@ fn main() {
         .map(|t| {
             let changes = t.to.iter()
                 .enumerate()
-                .map(|(i, to)| changes(&t.orig, &to, i == 0)).collect();
+                .map(|(i, to)| changes_between(&t.orig, &to, i == 0)).collect();
             (t.orig, changes)
         })
         .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
@@ -408,57 +439,96 @@ fn main() {
         else { 500 }
     });
 
+    // Sort changes by category
+    let category_new = new_tasks.iter().filter(|x| !x.finished).cloned().collect::<Vec<Task>>();
+    let category_deleted = changes.iter()
+                                  .filter(|&&(_, ref to)| to.is_empty())
+                                  .map(|&(ref from, _)| from.clone())
+                                  .collect::<Vec<Task>>();
+    let category_completed = changes.iter()
+                                    .filter(|&&(_, ref to)| has_been_recurred(to) ||
+                                                            has_been_completed(to))
+                                    .cloned()
+                                    .chain(new_tasks.iter()
+                                                    .filter(|x| x.finished)
+                                                    .map(|x| { let u = uncomplete(x);
+                                                               let mut c = changes_between(&u, &x, true);
+                                                               let mut chgs = vec![Changes::Created];
+                                                               chgs.append(&mut c);
+                                                               (u, vec![chgs]) }))
+                                    .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
+    let category_changed = changes.iter()
+                                  .filter(|&&(_, ref to)| !has_been_recurred(to) &&
+                                                          !has_been_completed(to) &&
+                                                          !to.is_empty())
+                                  .cloned()
+                                  .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
+    let no_changes = category_new.is_empty() && category_deleted.is_empty() &&
+                     category_completed.is_empty() && category_changed.is_empty();
+
     // Nice display
-    if new_tasks.is_empty() {
-        println!("No new tasks.\n");
-    } else {
-        println!("New tasks:");
-        for t in new_tasks {
+    if no_changes {
+        println!("No changes.");
+    }
+
+    let mut is_first = true;
+    if !category_new.is_empty() {
+        is_first = false;
+        println!("New tasks");
+        println!("---------");
+        println!();
+        for t in category_new {
             println!(" → {}", color(colorize, Green, &t));
         }
-        println!();
     }
-    if changes.is_empty() {
-        println!("No changed tasks.\n");
-    } else {
-        println!("Changed tasks:");
-        for (orig, chgs) in changes {
-            if chgs.is_empty() {
-                println!(" → {}", color(colorize, Red, &orig));
-                println!("    → {}", "Deleted");
-            } else {
-                if has_been_recurred(&chgs) {
-                    println!(" → {}", color(colorize, Green, &orig));
-                } else if has_been_completed(&chgs) {
-                    println!(" → {}", color(colorize, Blue, &orig));
-                } else if has_been_postponed(&chgs) {
-                    println!(" → {}", color(colorize, Yellow, &orig));
-                } else {
-                    println!(" → {}", orig);
-                }
 
-                for chgs_for_me in chgs {
-                    print!("    → ");
-                    for c in 0..chgs_for_me.len() {
-                        let chg = change_str(&chgs_for_me[c]);
-                        if c == 0 {
-                            let mut chars = chg.chars();
-                            let first_char = chars.next().expect("Internal error E004")
-                                .to_uppercase();
-                            print!("{}{}", first_char, chars.as_str());
-                        } else {
-                            print!("{}", chg);
-                        }
-                        if c < chgs_for_me.len().saturating_sub(2) {
-                            print!(", ");
-                        } else if c == chgs_for_me.len() - 2 {
-                            print!(" and ");
-                        }
-                    }
-                    println!();
-                }
-            }
+    if !category_deleted.is_empty() {
+        if !is_first { println!() }
+        is_first = false;
+        println!("Deleted tasks");
+        println!("-------------");
+        println!();
+        for t in category_deleted {
+            println!(" → {}", color(colorize, Red, &t));
+        }
+    }
+
+    if !category_completed.is_empty() {
+        if !is_first { println!() }
+        is_first = false;
+        println!("Completed tasks");
+        println!("---------------");
+        for (t, c) in category_completed {
             println!();
+
+            if has_been_recurred(&c) {
+                println!(" → {}", color(colorize, Green, &t));
+            } else {
+                println!(" → {}", color(colorize, Blue, &t));
+            }
+
+            for chgs in c {
+                display_changes(chgs);
+            }
+        }
+    }
+
+    if !category_changed.is_empty() {
+        if !is_first { println!() }
+        println!("Changed tasks");
+        println!("-------------");
+        for (t, c) in category_changed {
+            println!();
+
+            if has_been_postponed(&c) {
+                println!(" → {}", color(colorize, Yellow, &t));
+            } else {
+                println!(" → {}", t);
+            }
+
+            for chgs in c {
+                display_changes(chgs);
+            }
         }
     }
 }

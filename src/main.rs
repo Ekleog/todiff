@@ -9,6 +9,7 @@ extern crate ansi_term;
 extern crate atty;
 extern crate chrono;
 extern crate clap;
+extern crate itertools;
 extern crate strsim;
 extern crate todo_txt;
 
@@ -16,6 +17,7 @@ use ansi_term::ANSIString;
 use ansi_term::Color;
 use ansi_term::Color::{Blue, Green, Red, Yellow};
 use chrono::{Datelike, Duration};
+use itertools::Itertools;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -138,14 +140,19 @@ fn change_str(c: &Changes) -> String {
         ThresholdDate(None, Some(d)) => format!("added threshold date {}", d),
         ThresholdDate(Some(_), Some(d)) => format!("set threshold date to {}", d),
         Tags(ref a, ref b) => {
+            use itertools::Position::*;
             let mut res = String::new();
             if a.len() == 1 {
                 res += "removed tag ";
             } else if a.len() > 1 {
                 res += "removed tags ";
             }
-            for t in a {
-                res += &format!("{}:{}", t.0, t.1);
+            for t in a.iter().with_position() {
+                match t {
+                    First(t) | Only(t) => res += &format!("{}:{}", t.0, t.1),
+                    Middle(t) => res += &format!(", {}:{}", t.0, t.1),
+                    Last(t) => res += &format!(" and {}:{}", t.0, t.1),
+                };
             }
             if !a.is_empty() && !b.is_empty() {
                 res += " and ";
@@ -155,8 +162,12 @@ fn change_str(c: &Changes) -> String {
             } else if b.len() > 1 {
                 res += "added tags ";
             }
-            for t in b {
-                res += &format!("{}:{}", t.0, t.1);
+            for t in b.iter().with_position() {
+                match t {
+                    First(t) | Only(t) => res += &format!("{}:{}", t.0, t.1),
+                    Middle(t) => res += &format!(", {}:{}", t.0, t.1),
+                    Last(t) => res += &format!(" and {}:{}", t.0, t.1),
+                };
             }
             res
         }

@@ -9,12 +9,13 @@ extern crate ansi_term;
 extern crate atty;
 extern crate chrono;
 extern crate clap;
+extern crate diff;
 extern crate itertools;
 extern crate strsim;
 extern crate todo_txt;
 
-use ansi_term::ANSIString;
-use ansi_term::Color;
+use ansi_term::{ANSIString, ANSIStrings};
+use ansi_term::{Color, Style};
 use ansi_term::Color::{Blue, Green, Red, Yellow};
 use chrono::{Datelike, Duration};
 use itertools::Itertools;
@@ -34,7 +35,7 @@ fn is_term_dumb() -> bool {
     env::var("TERM").ok() == Some(String::from("dumb"))
 }
 
-fn color<T>(colorize: bool, color: Color, e: &T) -> ansi_term::ANSIGenericString<str>
+fn color<T>(colorize: bool, color: Color, e: &T) -> ANSIString
         where T: std::fmt::Display {
     let e_str = format!("{}", e);
     if colorize {
@@ -110,35 +111,48 @@ fn is_postponed(c: &Changes) -> bool {
     }
 }
 
-fn change_str(c: &Changes) -> String {
+fn change_str(colorize: bool, c: &Changes) -> Vec<ANSIString> {
     use Changes::*;
     match *c {
-        Created => "created".to_owned(),
-        Copied => "copied".to_owned(),
-        RecurredStrict => "recurred (strict)".to_owned(),
-        RecurredFrom(d) => format!("recurred (from {})", d),
+        Created => vec!["created".into()],
+        Copied => vec!["copied".into()],
+        RecurredStrict => vec!["recurred (strict)".into()],
+        RecurredFrom(d) => vec![format!("recurred (from {})", d).into()],
 
-        FinishedAt(d) => format!("completed on {}", d),
-        PostponedStrictBy(d) => format!("postponed (strict) by {} days", d.num_days()),
+        FinishedAt(d) => vec![format!("completed on {}", d).into()],
+        PostponedStrictBy(d) => vec![format!("postponed (strict) by {} days", d.num_days()).into()],
 
-        Finished(true) => "completed".to_owned(),
-        Finished(false) => "uncompleted".to_owned(),
-        Priority(_, None) => "removed priority".to_owned(),
-        Priority(None, Some(c)) => format!("added priority ({})", c),
-        Priority(Some(_), Some(b)) => format!("set priority to ({})", b),
-        FinishDate(_, None) => "removed completion date".to_owned(),
-        FinishDate(None, Some(d)) => format!("added completion date {}", d),
-        FinishDate(Some(_), Some(d)) => format!("set completion date to {}", d),
-        CreateDate(_, None) => "removed creation date".to_owned(),
-        CreateDate(None, Some(d)) => format!("added creation date {}", d),
-        CreateDate(Some(_), Some(d)) => format!("set creation date to {}", d),
-        Subject(_, ref s) => format!("set subject to ‘{}’", s),
-        DueDate(_, None) => "removed due date".to_owned(),
-        DueDate(None, Some(d)) => format!("added due date {}", d),
-        DueDate(Some(_), Some(d)) => format!("postponed to {}", d),
-        ThresholdDate(_, None) => "removed threshold date".to_owned(),
-        ThresholdDate(None, Some(d)) => format!("added threshold date {}", d),
-        ThresholdDate(Some(_), Some(d)) => format!("set threshold date to {}", d),
+        Finished(true) => vec!["completed".into()],
+        Finished(false) => vec!["uncompleted".into()],
+        Priority(_, None) => vec!["removed priority".into()],
+        Priority(None, Some(c)) => vec![format!("added priority ({})", c).into()],
+        Priority(Some(_), Some(b)) => vec![format!("set priority to ({})", b).into()],
+        FinishDate(_, None) => vec!["removed completion date".into()],
+        FinishDate(None, Some(d)) => vec![format!("added completion date {}", d).into()],
+        FinishDate(Some(_), Some(d)) => vec![format!("set completion date to {}", d).into()],
+        CreateDate(_, None) => vec!["removed creation date".into()],
+        CreateDate(None, Some(d)) => vec![format!("added creation date {}", d).into()],
+        CreateDate(Some(_), Some(d)) => vec![format!("set creation date to {}", d).into()],
+        Subject(ref s, ref t) if colorize => {
+            let mut res = vec![ANSIString::from("changed subject ‘")];
+            for d in diff::chars(s, t) {
+                use diff::Result::*;
+                match d {
+                    Both(c, _) => res.push(c.to_string().into()),
+                    Left(c) => res.push(Style::new().on(Red).paint(c.to_string())),
+                    Right(c) => res.push(Style::new().on(Green).paint(c.to_string())),
+                }
+            }
+            res.push("’".into());
+            res
+        }
+        Subject(_, ref s) => vec![format!("set subject to ‘{}’", s).into()],
+        DueDate(_, None) => vec!["removed due date".into()],
+        DueDate(None, Some(d)) => vec![format!("added due date {}", d).into()],
+        DueDate(Some(_), Some(d)) => vec![format!("postponed to {}", d).into()],
+        ThresholdDate(_, None) => vec!["removed threshold date".into()],
+        ThresholdDate(None, Some(d)) => vec![format!("added threshold date {}", d).into()],
+        ThresholdDate(Some(_), Some(d)) => vec![format!("set threshold date to {}", d).into()],
         Tags(ref a, ref b) => {
             use itertools::Position::*;
             let mut res = String::new();
@@ -169,7 +183,7 @@ fn change_str(c: &Changes) -> String {
                     Last(t) => res += &format!(" and {}:{}", t.0, t.1),
                 };
             }
-            res
+            vec![res.into()]
         }
     }
 }
@@ -337,17 +351,17 @@ fn uncomplete(t: &Task) -> Task {
     res
 }
 
-fn display_changes(chgs_for_me: Vec<Changes>) {
+fn display_changes(colorize: bool, chgs_for_me: Vec<Changes>) {
     print!("    → ");
     for c in 0..chgs_for_me.len() {
-        let chg = change_str(&chgs_for_me[c]);
+        let chg = change_str(colorize, &chgs_for_me[c]);
         if c == 0 {
-            let mut chars = chg.chars();
+            let mut chars = chg[0].chars();
             let first_char = chars.next().expect("Internal error E004")
                 .to_uppercase();
-            print!("{}{}", first_char, chars.as_str());
+            print!("{}{}{}", first_char, chars.as_str(), ANSIStrings(&chg[1..]));
         } else {
-            print!("{}", chg);
+            print!("{}", ANSIStrings(&chg));
         }
         if c < chgs_for_me.len().saturating_sub(2) {
             print!(", ");
@@ -519,7 +533,7 @@ fn main() {
             }
 
             for chgs in c {
-                display_changes(chgs);
+                display_changes(colorize, chgs);
             }
         }
     }
@@ -538,7 +552,7 @@ fn main() {
             }
 
             for chgs in c {
-                display_changes(chgs);
+                display_changes(colorize, chgs);
             }
         }
     }

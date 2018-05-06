@@ -352,22 +352,24 @@ fn uncomplete(t: &Task) -> Task {
 }
 
 fn display_changes(colorize: bool, chgs_for_me: Vec<Changes>) {
+    use itertools::Position::*;
     print!("    → ");
-    for c in 0..chgs_for_me.len() {
-        let chg = change_str(colorize, &chgs_for_me[c]);
-        if c == 0 {
-            let mut chars = chg[0].chars();
-            let first_char = chars.next().expect("Internal error E004")
-                .to_uppercase();
-            print!("{}{}{}", first_char, chars.as_str(), ANSIStrings(&chg[1..]));
-        } else {
-            print!("{}", ANSIStrings(&chg));
-        }
-        if c < chgs_for_me.len().saturating_sub(2) {
-            print!(", ");
-        } else if c == chgs_for_me.len() - 2 {
-            print!(" and ");
-        }
+    for c in chgs_for_me.into_iter().with_position() {
+        match c {
+            First(c) | Only(c) => {
+                let chg = change_str(colorize, &c);
+                let mut chars = chg[0].chars();
+                let first_char = chars.next().expect("Internal error E004")
+                    .to_uppercase();
+                print!("{}{}{}", first_char, chars.as_str(), ANSIStrings(&chg[1..]));
+            }
+            Middle(c) => {
+                print!(", {}", ANSIStrings(&change_str(colorize, &c)));
+            }
+            Last(c) => {
+                print!(" and {}", ANSIStrings(&change_str(colorize, &c)));
+            }
+        };
     }
     println!();
 }

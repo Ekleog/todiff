@@ -1,13 +1,13 @@
+use ansi_term::Color::{Blue, Green, Red, Yellow};
 use ansi_term::{ANSIString, ANSIStrings};
 use ansi_term::{Color, Style};
-use ansi_term::Color::{Blue, Green, Red, Yellow};
 use chrono::{Datelike, Duration};
 use diff;
 use itertools::Itertools;
-use strsim::levenshtein;
 use std;
-use todo_txt::Task;
+use strsim::levenshtein;
 use todo_txt::Date as TaskDate;
+use todo_txt::Task;
 
 #[derive(Debug)]
 pub struct TaskChange {
@@ -64,7 +64,9 @@ fn is_postponed(c: &Changes) -> bool {
 }
 
 fn color<T>(colorize: bool, color: Color, e: &T) -> ANSIString
-        where T: std::fmt::Display {
+where
+    T: std::fmt::Display,
+{
     let e_str = format!("{}", e);
     if colorize {
         color.paint(e_str)
@@ -158,8 +160,9 @@ fn postpone_days(from: &Task, to: &Task) -> Option<Duration> {
             }
             if let Some(from_thresh) = from.threshold_date {
                 if let Some(to_thresh) = to.threshold_date {
-                    if to_due.signed_duration_since(from_due) ==
-                            to_thresh.signed_duration_since(from_thresh) {
+                    if to_due.signed_duration_since(from_due)
+                        == to_thresh.signed_duration_since(from_thresh)
+                    {
                         return Some(to_due.signed_duration_since(from_due));
                     }
                 }
@@ -176,13 +179,16 @@ fn add_recspec_to_date(date: TaskDate, recspec: &str) -> Option<TaskDate> {
         match recspec.chars().last() {
             Some('d') => Some(date + Duration::days(n as i64)),
             Some('w') => Some(date + Duration::weeks(n as i64)),
-            Some('m') =>
-                Some(date.with_month0((date.month0() + n as u32) % 12)
-                         .expect("Internal error E006")
-                         .with_year(date.year() + ((date.month0() + n as u32) / 12) as i32)
-                         .expect("Internal error E007")),
-            Some('y') => Some(date.with_year(date.year() + n as i32)
-                                  .expect("Internal error E008")),
+            Some('m') => Some(
+                date.with_month0((date.month0() + n as u32) % 12)
+                    .expect("Internal error E006")
+                    .with_year(date.year() + ((date.month0() + n as u32) / 12) as i32)
+                    .expect("Internal error E007"),
+            ),
+            Some('y') => Some(
+                date.with_year(date.year() + n as i32)
+                    .expect("Internal error E008"),
+            ),
             _ => None,
         }
     } else {
@@ -200,8 +206,12 @@ fn changes_between(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
 
     // First, things that may trigger a removal of the `copied` item
     if !is_first && from.tags.get("rec") == to.tags.get("rec") {
-        if let (Some(r), Some(_), Some(from_due), Some(to_due)) =
-                (from.tags.get("rec"), postpone_days(from, to), from.due_date, to.due_date) {
+        if let (Some(r), Some(_), Some(from_due), Some(to_due)) = (
+            from.tags.get("rec"),
+            postpone_days(from, to),
+            from.due_date,
+            to.due_date,
+        ) {
             if r.chars().next() == Some('+') {
                 let mut c = r.chars();
                 c.next();
@@ -227,8 +237,11 @@ fn changes_between(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
     }
 
     // Then, the optimizations handling multiple changes at once
-    if from.finished == false && to.finished == true &&
-            from.finish_date.is_none() && to.finish_date.is_some() {
+    if from.finished == false
+        && to.finished == true
+        && from.finish_date.is_none()
+        && to.finish_date.is_some()
+    {
         res.push(FinishedAt(to.finish_date.expect("Internal error E005")));
         done_finished_at = true;
     }
@@ -273,8 +286,16 @@ fn changes_between(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
         res.push(CreateDate(from.create_date, to.create_date));
     }
     if from.tags != to.tags {
-        let mut from_t = from.tags.iter().map(|(a, b)| (a.clone(), b.clone())).collect::<Vec<(String, String)>>();
-        let mut to_t = to.tags.iter().map(|(a, b)| (a.clone(), b.clone())).collect::<Vec<(String, String)>>();
+        let mut from_t = from
+            .tags
+            .iter()
+            .map(|(a, b)| (a.clone(), b.clone()))
+            .collect::<Vec<(String, String)>>();
+        let mut to_t = to
+            .tags
+            .iter()
+            .map(|(a, b)| (a.clone(), b.clone()))
+            .collect::<Vec<(String, String)>>();
         remove_common(&mut from_t, &mut to_t);
         res.push(Tags(from_t, to_t));
     }
@@ -321,8 +342,7 @@ fn display_changes(colorize: bool, chgs_for_me: Vec<Changes>) {
             First(c) | Only(c) => {
                 let chg = change_str(colorize, &c);
                 let mut chars = chg[0].chars();
-                let first_char = chars.next().expect("Internal error E004")
-                    .to_uppercase();
+                let first_char = chars.next().expect("Internal error E004").to_uppercase();
                 print!("{}{}{}", first_char, chars.as_str(), ANSIStrings(&chg[1..]));
             }
             Middle(c) => {
@@ -336,8 +356,11 @@ fn display_changes(colorize: bool, chgs_for_me: Vec<Changes>) {
     println!();
 }
 
-pub fn compute_changeset(mut from: Vec<Task>, mut to: Vec<Task>, allowed_divergence: usize)
-        -> (Vec<Task>, Vec<(Task, Vec<Vec<Changes>>)>) {
+pub fn compute_changeset(
+    mut from: Vec<Task>,
+    mut to: Vec<Task>,
+    allowed_divergence: usize,
+) -> (Vec<Task>, Vec<(Task, Vec<Vec<Changes>>)>) {
     // Remove elements in common
     remove_common(&mut from, &mut to);
 
@@ -353,12 +376,16 @@ pub fn compute_changeset(mut from: Vec<Task>, mut to: Vec<Task>, allowed_diverge
     // Add all right-hand tasks to the changeset
     let mut new_tasks = Vec::new();
     for x in to.into_iter() {
-        let best_match = changeset.iter_mut()
+        let best_match = changeset
+            .iter_mut()
             .min_by_key(|t| levenshtein(&t.orig.subject, &x.subject))
             .and_then(|t| {
                 let distance = levenshtein(&t.orig.subject, &x.subject);
-                if distance * 100 / t.orig.subject.len() < allowed_divergence { Some(t) }
-                else { None }
+                if distance * 100 / t.orig.subject.len() < allowed_divergence {
+                    Some(t)
+                } else {
+                    None
+                }
             });
         if let Some(best) = best_match {
             best.to.push(x);
@@ -368,11 +395,15 @@ pub fn compute_changeset(mut from: Vec<Task>, mut to: Vec<Task>, allowed_diverge
     }
 
     // Retrieve changes
-    let changes = changeset.into_iter()
+    let changes = changeset
+        .into_iter()
         .map(|t| {
-            let changes = t.to.iter()
+            let changes = t
+                .to
+                .iter()
                 .enumerate()
-                .map(|(i, to)| changes_between(&t.orig, &to, i == 0)).collect();
+                .map(|(i, to)| changes_between(&t.orig, &to, i == 0))
+                .collect();
             (t.orig, changes)
         })
         .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
@@ -380,43 +411,59 @@ pub fn compute_changeset(mut from: Vec<Task>, mut to: Vec<Task>, allowed_diverge
     (new_tasks, changes)
 }
 
-pub fn display_changeset(mut new_tasks: Vec<Task>, mut changes: Vec<(Task, Vec<Vec<Changes>>)>, colorize: bool) {
+pub fn display_changeset(
+    mut new_tasks: Vec<Task>,
+    mut changes: Vec<(Task, Vec<Vec<Changes>>)>,
+    colorize: bool,
+) {
     // Sort tasks
     new_tasks.sort_by_key(|x| x.create_date);
     changes.sort_by_key(|&(_, ref chgs)| {
-        if has_been_recurred(chgs) { 100 }
-        else if has_been_completed(chgs) { 200 }
-        else if has_been_postponed(chgs) { 300 }
-        else if chgs.is_empty() { 400 }
-        else { 500 }
+        if has_been_recurred(chgs) {
+            100
+        } else if has_been_completed(chgs) {
+            200
+        } else if has_been_postponed(chgs) {
+            300
+        } else if chgs.is_empty() {
+            400
+        } else {
+            500
+        }
     });
 
     // Sort changes by category
-    let category_new = new_tasks.iter().filter(|x| !x.finished).cloned().collect::<Vec<Task>>();
-    let category_deleted = changes.iter()
-                                  .filter(|&&(_, ref to)| to.is_empty())
-                                  .map(|&(ref from, _)| from.clone())
-                                  .collect::<Vec<Task>>();
-    let category_completed = changes.iter()
-                                    .filter(|&&(_, ref to)| has_been_recurred(to) ||
-                                                            has_been_completed(to))
-                                    .cloned()
-                                    .chain(new_tasks.iter()
-                                                    .filter(|x| x.finished)
-                                                    .map(|x| { let u = uncomplete(x);
-                                                               let mut c = changes_between(&u, &x, true);
-                                                               let mut chgs = vec![Changes::Created];
-                                                               chgs.append(&mut c);
-                                                               (u, vec![chgs]) }))
-                                    .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
-    let category_changed = changes.iter()
-                                  .filter(|&&(_, ref to)| !has_been_recurred(to) &&
-                                                          !has_been_completed(to) &&
-                                                          !to.is_empty())
-                                  .cloned()
-                                  .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
-    let no_changes = category_new.is_empty() && category_deleted.is_empty() &&
-                     category_completed.is_empty() && category_changed.is_empty();
+    let category_new = new_tasks
+        .iter()
+        .filter(|x| !x.finished)
+        .cloned()
+        .collect::<Vec<Task>>();
+    let category_deleted = changes
+        .iter()
+        .filter(|&&(_, ref to)| to.is_empty())
+        .map(|&(ref from, _)| from.clone())
+        .collect::<Vec<Task>>();
+    let category_completed = changes
+        .iter()
+        .filter(|&&(_, ref to)| has_been_recurred(to) || has_been_completed(to))
+        .cloned()
+        .chain(new_tasks.iter().filter(|x| x.finished).map(|x| {
+            let u = uncomplete(x);
+            let mut c = changes_between(&u, &x, true);
+            let mut chgs = vec![Changes::Created];
+            chgs.append(&mut c);
+            (u, vec![chgs])
+        }))
+        .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
+    let category_changed = changes
+        .iter()
+        .filter(|&&(_, ref to)| !has_been_recurred(to) && !has_been_completed(to) && !to.is_empty())
+        .cloned()
+        .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
+    let no_changes = category_new.is_empty()
+        && category_deleted.is_empty()
+        && category_completed.is_empty()
+        && category_changed.is_empty();
 
     // Nice display
     if no_changes {
@@ -435,7 +482,9 @@ pub fn display_changeset(mut new_tasks: Vec<Task>, mut changes: Vec<(Task, Vec<V
     }
 
     if !category_deleted.is_empty() {
-        if !is_first { println!() }
+        if !is_first {
+            println!()
+        }
         is_first = false;
         println!("Deleted tasks");
         println!("-------------");
@@ -446,7 +495,9 @@ pub fn display_changeset(mut new_tasks: Vec<Task>, mut changes: Vec<(Task, Vec<V
     }
 
     if !category_completed.is_empty() {
-        if !is_first { println!() }
+        if !is_first {
+            println!()
+        }
         is_first = false;
         println!("Completed tasks");
         println!("---------------");
@@ -466,7 +517,9 @@ pub fn display_changeset(mut new_tasks: Vec<Task>, mut changes: Vec<(Task, Vec<V
     }
 
     if !category_changed.is_empty() {
-        if !is_first { println!() }
+        if !is_first {
+            println!()
+        }
         println!("Changed tasks");
         println!("-------------");
         for (t, c) in category_changed {
@@ -488,8 +541,8 @@ pub fn display_changeset(mut new_tasks: Vec<Task>, mut changes: Vec<(Task, Vec<V
 #[cfg(test)]
 mod tests {
     use super::*;
-    use todo_txt::Task;
     use std::str::FromStr;
+    use todo_txt::Task;
 
     fn tasks_from_strings(strings: Vec<&str>) -> Vec<Task> {
         strings
@@ -500,19 +553,12 @@ mod tests {
 
     #[test]
     fn new_tasks() {
-        let from = tasks_from_strings(vec![
-            "do a thing",
-        ]);
-        let to = tasks_from_strings(vec![
-            "do a thing",
-            "do another thing",
-        ]);
+        let from = tasks_from_strings(vec!["do a thing"]);
+        let to = tasks_from_strings(vec!["do a thing", "do another thing"]);
         let allowed_divergence = 0;
         let (new_tasks, changes) = compute_changeset(from, to, allowed_divergence);
 
-        assert_eq!(new_tasks, tasks_from_strings(vec![
-            "do another thing",
-        ]));
+        assert_eq!(new_tasks, tasks_from_strings(vec!["do another thing"]));
         assert_eq!(changes, vec![]);
     }
 }

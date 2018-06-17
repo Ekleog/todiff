@@ -5,16 +5,15 @@ extern crate clap;
 extern crate diff;
 extern crate itertools;
 extern crate strsim;
-extern crate todo_txt;
 extern crate todiff;
+extern crate todo_txt;
 
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
-use todo_txt::Task;
 use todiff::task_change::*;
-
+use todo_txt::Task;
 
 fn is_a_tty() -> bool {
     atty::is(atty::Stream::Stdout)
@@ -29,12 +28,13 @@ fn read_tasks(path: &str) -> Vec<Task> {
     let mut res = Vec::new();
     for line in reader.lines() {
         let line = line.expect(&format!("Unable to read file ‘{}’", path));
-        res.push(Task::from_str(&line)
-                    .expect(&format!("Unable to parse line in file ‘{}’:\n{}", path, line)));
+        res.push(Task::from_str(&line).expect(&format!(
+            "Unable to parse line in file ‘{}’:\n{}",
+            path, line
+        )));
     }
     res
 }
-
 
 fn main() {
     // Read arguments
@@ -68,11 +68,13 @@ fn main() {
         "never" => false,
         "always" => true,
         "auto" => is_a_tty() && !is_term_dumb(),
-        _ => panic!("Internal error E010")
+        _ => panic!("Internal error E010"),
     };
 
     let similarity_option = matches.value_of("similarity").expect("Internal error E011");
-    let similarity = similarity_option.parse::<usize>().expect("Internal error E012");
+    let similarity = similarity_option
+        .parse::<usize>()
+        .expect("Internal error E012");
     let allowed_divergence = 100 - similarity;
 
     // Read files

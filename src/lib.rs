@@ -9,4 +9,3 @@ extern crate strsim;
 extern crate todo_txt;
 
 pub mod task_change;
-

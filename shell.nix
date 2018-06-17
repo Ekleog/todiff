@@ -29,7 +29,7 @@ let
 in
 
 pkgs.stdenv.mkDerivation {
-  name = "yuubind";
+  name = "todiff";
   buildInputs = (with rustNightlyChannel; [ rustfmt-preview ]) ++
                 (with rustStableChannel; [ rust ]);
 }

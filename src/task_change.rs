@@ -561,4 +561,34 @@ mod tests {
         assert_eq!(new_tasks, tasks_from_strings(vec!["do another thing"]));
         assert_eq!(changes, vec![]);
     }
+
+    #[test]
+    fn recurring_tasks() {
+        use super::Changes::*;
+
+        let from = tasks_from_strings(vec!["2018-04-08 foo due:2018-04-08 rec:1d"]);
+        let to = tasks_from_strings(vec![
+            "x 2018-04-08 2018-04-08 foo due:2018-04-08 rec:1d",
+            "x 2018-04-08 2018-04-08 foo due:2018-04-09 rec:1d",
+            "2018-04-08 foo due:2018-04-10 rec:1d",
+            "2018-04-08 bar",
+        ]);
+        let (new_tasks, changes) = compute_changeset(from, to, 50);
+
+        assert_eq!(new_tasks, tasks_from_strings(vec!["2018-04-08 bar"]));
+        assert_eq!(
+            changes,
+            vec![(
+                Task::from_str("2018-04-08 foo due:2018-04-08 rec:1d").unwrap(),
+                vec![
+                    vec![FinishedAt(TaskDate::from_ymd(2018, 4, 8))],
+                    vec![
+                        RecurredFrom(TaskDate::from_ymd(2018, 4, 8)),
+                        FinishedAt(TaskDate::from_ymd(2018, 4, 8)),
+                    ],
+                    vec![Copied, PostponedStrictBy(Duration::days(2))],
+                ],
+            )]
+        );
+    }
 }

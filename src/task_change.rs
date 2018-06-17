@@ -15,7 +15,7 @@ pub struct TaskChange {
     to: Vec<Task>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Changes {
     Created,
     Copied,
@@ -482,5 +482,37 @@ pub fn display_changeset(mut new_tasks: Vec<Task>, mut changes: Vec<(Task, Vec<V
                 display_changes(colorize, chgs);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use todo_txt::Task;
+    use std::str::FromStr;
+
+    fn tasks_from_strings(strings: Vec<&str>) -> Vec<Task> {
+        strings
+            .into_iter()
+            .map(|x| Task::from_str(&x).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn new_tasks() {
+        let from = tasks_from_strings(vec![
+            "do a thing",
+        ]);
+        let to = tasks_from_strings(vec![
+            "do a thing",
+            "do another thing",
+        ]);
+        let allowed_divergence = 0;
+        let (new_tasks, changes) = compute_changeset(from, to, allowed_divergence);
+
+        assert_eq!(new_tasks, tasks_from_strings(vec![
+            "do another thing",
+        ]));
+        assert_eq!(changes, vec![]);
     }
 }

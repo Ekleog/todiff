@@ -562,9 +562,92 @@ mod tests {
     }
 
     #[test]
+    fn copy_task() {
+        let from = tasks_from_strings(vec!["do a thing"]);
+        let to = tasks_from_strings(vec!["do a thing", "do a thing"]);
+        let (new_tasks, changes) = compute_changeset(from, to, 0);
+
+        assert_eq!(new_tasks, tasks_from_strings(vec!["do a thing"]));
+        assert_eq!(changes, vec![]);
+
+        // TODO: Unwanted behaviour
+        let from = tasks_from_strings(vec!["do a thing"]);
+        let to = tasks_from_strings(vec!["x do a thing", "x do a thing"]);
+        let (new_tasks, changes) = compute_changeset(from, to, 0);
+
+        assert_eq!(
+            new_tasks,
+            tasks_from_strings(vec!["x do a thing", "x do a thing"])
+        );
+        assert_eq!(
+            changes,
+            vec![(Task::from_str("do a thing").unwrap(), vec![])]
+        );
+    }
+
+    #[test]
+    fn delete_task() {
+        let from = tasks_from_strings(vec!["do a thing"]);
+        let to = tasks_from_strings(vec!["what is this ?"]);
+        let (new_tasks, changes) = compute_changeset(from, to, 30);
+
+        assert_eq!(new_tasks, tasks_from_strings(vec!["what is this ?"]));
+        assert_eq!(
+            changes,
+            vec![(Task::from_str("do a thing").unwrap(), vec![])]
+        );
+    }
+
+    #[test]
+    fn change_subject() {
+        use super::Changes::*;
+        let from = tasks_from_strings(vec!["do a thing", "eat a hamburger"]);
+        let to = tasks_from_strings(vec!["drink a hamburger", "do an thing"]);
+        let (new_tasks, changes) = compute_changeset(from, to, 40);
+
+        assert_eq!(new_tasks, vec![]);
+        assert_eq!(
+            changes,
+            vec![
+                (
+                    Task::from_str("do a thing").unwrap(),
+                    vec![vec![Subject(
+                        "do a thing".to_string(),
+                        "do an thing".to_string(),
+                    )]],
+                ),
+                (
+                    Task::from_str("eat a hamburger").unwrap(),
+                    vec![vec![Subject(
+                        "eat a hamburger".to_string(),
+                        "drink a hamburger".to_string(),
+                    )]],
+                ),
+            ]
+        );
+
+        let from = tasks_from_strings(vec!["do a thing"]);
+        let to = tasks_from_strings(vec!["do an thing", "x do a thing"]);
+        let (new_tasks, changes) = compute_changeset(from, to, 40);
+
+        assert_eq!(new_tasks, vec![]);
+        assert_eq!(
+            changes,
+            vec![(
+                Task::from_str("do a thing").unwrap(),
+                vec![
+                    vec![Subject("do a thing".to_string(), "do an thing".to_string())],
+                    vec![Copied, Finished(true)],
+                ],
+            )]
+        );
+    }
+
+    #[test]
     fn recurring_tasks() {
         use super::Changes::*;
 
+        // TODO: Unwanted behaviour
         let from = tasks_from_strings(vec!["2018-04-08 foo due:2018-04-08 rec:1d"]);
         let to = tasks_from_strings(vec![
             "x 2018-04-08 2018-04-08 foo due:2018-04-08 rec:1d",
@@ -586,6 +669,36 @@ mod tests {
                         FinishedAt(TaskDate::from_ymd(2018, 4, 8)),
                     ],
                     vec![Copied, PostponedStrictBy(Duration::days(2))],
+                ],
+            )]
+        );
+
+        // TODO: Unwanted behaviour
+        let from = tasks_from_strings(vec!["2018-06-01 foo due:2018-06-20 rec:1m"]);
+        let to = tasks_from_strings(vec![
+            "x 2018-06-17 2018-06-01 foo due:2018-06-15 rec:1m",
+            "2018-06-17 foo due:2018-07-15 rec:1m",
+        ]);
+        let (new_tasks, changes) = compute_changeset(from, to, 50);
+
+        assert_eq!(new_tasks, vec![]);
+        assert_eq!(
+            changes,
+            vec![(
+                Task::from_str("2018-06-01 foo due:2018-06-20 rec:1m").unwrap(),
+                vec![
+                    vec![
+                        FinishedAt(TaskDate::from_ymd(2018, 6, 17)),
+                        PostponedStrictBy(Duration::days(-5)),
+                    ],
+                    vec![
+                        Copied,
+                        PostponedStrictBy(Duration::days(25)),
+                        CreateDate(
+                            Some(TaskDate::from_ymd(2018, 6, 1)),
+                            Some(TaskDate::from_ymd(2018, 6, 17)),
+                        ),
+                    ],
                 ],
             )]
         );

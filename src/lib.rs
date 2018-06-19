@@ -8,4 +8,8 @@ extern crate strsim;
 
 extern crate todo_txt;
 
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 pub mod task_change;

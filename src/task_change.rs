@@ -555,8 +555,7 @@ mod tests {
     fn new_tasks() {
         let from = tasks_from_strings(vec!["do a thing"]);
         let to = tasks_from_strings(vec!["do a thing", "do another thing"]);
-        let allowed_divergence = 0;
-        let (new_tasks, changes) = compute_changeset(from, to, allowed_divergence);
+        let (new_tasks, changes) = compute_changeset(from, to, 0);
 
         assert_eq!(new_tasks, tasks_from_strings(vec!["do another thing"]));
         assert_eq!(changes, vec![]);

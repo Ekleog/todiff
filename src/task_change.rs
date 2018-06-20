@@ -356,6 +356,24 @@ fn display_changes(colorize: bool, chgs_for_me: Vec<Changes>) {
     println!();
 }
 
+fn is_task_admissible(from: &Task, other: &Task, allowed_divergence: usize) -> bool {
+    let distance = levenshtein(&other.subject, &from.subject);
+    distance * 100 / other.subject.len() < allowed_divergence
+}
+
+// Compares two tasks to determine which is closest to a third task
+fn cmp_tasks_3way(from: &Task, left: &Task, right: &Task) -> std::cmp::Ordering {
+    use std::cmp::Ordering::*;
+    let left_lev = levenshtein(&left.subject, &from.subject);
+    let right_lev = levenshtein(&right.subject, &from.subject);
+    if left_lev != right_lev {
+        left_lev.cmp(&right_lev)
+    } else {
+        // TODO: compare on other fields
+        Equal
+    }
+}
+
 pub fn compute_changeset(
     mut from: Vec<Task>,
     mut to: Vec<Task>,
@@ -378,10 +396,9 @@ pub fn compute_changeset(
     for x in to.into_iter() {
         let best_match = changeset
             .iter_mut()
-            .min_by_key(|t| levenshtein(&t.orig.subject, &x.subject))
+            .min_by(|left, right| cmp_tasks_3way(&x, &left.orig, &right.orig))
             .and_then(|t| {
-                let distance = levenshtein(&t.orig.subject, &x.subject);
-                if distance * 100 / t.orig.subject.len() < allowed_divergence {
+                if is_task_admissible(&x, &t.orig, allowed_divergence) {
                     Some(t)
                 } else {
                     None
@@ -543,6 +560,23 @@ mod tests {
     use super::*;
     use std::str::FromStr;
     use todo_txt::Task;
+
+    fn cmp3(from: &str, left: &str, right: &str) -> std::cmp::Ordering {
+        cmp_tasks_3way(
+            &Task::from_str(from).unwrap(),
+            &Task::from_str(left).unwrap(),
+            &Task::from_str(right).unwrap()
+        )
+    }
+
+    #[test]
+    fn test_cmp_3way() {
+        use std::cmp::Ordering::*;
+        assert_eq!(cmp3("do a thing", "do a thing", "do an thing"), Less);
+        assert_eq!(cmp3("do a thing", "do an thing", "do a thingie"), Less);
+        assert_eq!(cmp3("do a thing", "x do a thing", "do any thing"), Less);
+    }
+
 
     fn tasks_from_strings(strings: Vec<&str>) -> Vec<Task> {
         strings

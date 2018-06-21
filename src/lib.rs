@@ -13,3 +13,4 @@ extern crate todo_txt;
 extern crate pretty_assertions;
 
 pub mod task_change;
+pub mod stable_marriage;

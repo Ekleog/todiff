@@ -4,6 +4,7 @@ use ansi_term::{Color, Style};
 use chrono::{Datelike, Duration};
 use diff;
 use itertools::Itertools;
+use stable_marriage;
 use std;
 use strsim::levenshtein;
 use todo_txt::Date as TaskDate;
@@ -374,6 +375,18 @@ fn cmp_tasks_3way(from: &Task, left: &Task, right: &Task) -> std::cmp::Ordering 
     }
 }
 
+fn preferred_task_ids(t: &Task, tasks: &Vec<Task>, allowed_divergence: usize) -> Vec<usize> {
+    let mut admissibles = tasks
+        .iter()
+        .enumerate()
+        .filter(|(_, x)| is_task_admissible(&t, &x, allowed_divergence))
+        .collect::<Vec<_>>();
+
+    admissibles.sort_unstable_by(|(_, left), (_, right)| cmp_tasks_3way(&t, &left, &right));
+
+    admissibles.into_iter().map(|(i, _)| i).collect::<Vec<_>>()
+}
+
 pub fn compute_changeset(
     mut from: Vec<Task>,
     mut to: Vec<Task>,
@@ -382,48 +395,60 @@ pub fn compute_changeset(
     // Remove elements in common
     remove_common(&mut from, &mut to);
 
-    // Prepare the changeset
-    let mut changeset = Vec::new();
-    for x in from.into_iter() {
-        changeset.push(TaskChange {
-            orig: x,
-            to: Vec::new(),
-        });
-    }
+    // Compute for each task the candidate matches, ordered by preference
+    let from_preferences_matrix = from.iter()
+        .map(|t| preferred_task_ids(&t, &to, allowed_divergence))
+        .collect::<Vec<Vec<usize>>>();
+    let to_preferences_matrix = to.iter()
+        .map(|t| preferred_task_ids(&t, &from, allowed_divergence))
+        .collect::<Vec<Vec<usize>>>();
 
-    // Add all right-hand tasks to the changeset
-    let mut new_tasks = Vec::new();
-    for x in to.into_iter() {
-        let best_match = changeset
-            .iter_mut()
-            .min_by(|left, right| cmp_tasks_3way(&x, &left.orig, &right.orig))
-            .and_then(|t| {
-                if is_task_admissible(&x, &t.orig, allowed_divergence) {
-                    Some(t)
-                } else {
-                    None
-                }
-            });
-        if let Some(best) = best_match {
-            best.to.push(x);
-        } else {
-            new_tasks.push(x);
-        }
-    }
+    // Compute a stable matching between the two task lists
+    let (matching, _) =
+        stable_marriage::stable_marriage(from_preferences_matrix, to_preferences_matrix);
 
-    // Retrieve changes
-    let changes = changeset
+    let mut to = to.into_iter().map(Some).collect::<Vec<Option<Task>>>();
+    let mut from = from.into_iter().map(Some).collect::<Vec<Option<Task>>>();
+
+    // Extract changed, new, and deleted tasks
+    let matches = matching
         .into_iter()
-        .map(|t| {
-            let changes = t
-                .to
-                .iter()
-                .enumerate()
-                .map(|(i, to)| changes_between(&t.orig, &to, i == 0))
-                .collect();
-            (t.orig, changes)
+        .enumerate()
+        .filter_map(|(i, x)| x.map(|x| (i, x)))
+        .map(|(i, j)| (from[i].take().unwrap(), to[j].take().unwrap()))
+        .collect::<Vec<_>>();
+
+    let new_tasks = to.into_iter().flat_map(|x| x);
+
+    let deleted_tasks = from.into_iter().flat_map(|x| x);
+
+    let mut changes = matches
+        .into_iter()
+        .map(|(l, r)| {
+            let changes = changes_between(&l, &r, true);
+            (l, vec![changes])
         })
+        .chain(deleted_tasks.map(|t| (t, vec![])))
         .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
+
+    // Detect recurred tasks
+    let new_tasks = new_tasks
+        .filter(|x| {
+            let best_match = changes
+                .iter_mut()
+                .filter(|(t, _)| t.tags.get("rec").is_some())
+                .filter(|(_, delta)| delta.len() != 0)
+                .filter(|(t, _)| is_task_admissible(&x, t, allowed_divergence))
+                .min_by(|(left, _), (right, _)| cmp_tasks_3way(&x, &left, &right));
+            if let Some((ref mut best, ref mut delta)) = best_match {
+                let changes = changes_between(&best, &x, false);
+                delta.push(changes);
+                false
+            } else {
+                true
+            }
+        })
+        .collect::<Vec<_>>();
 
     (new_tasks, changes)
 }
@@ -663,15 +688,12 @@ mod tests {
         let to = tasks_from_strings(vec!["do an thing", "x do a thing"]);
         let (new_tasks, changes) = compute_changeset(from, to, 40);
 
-        assert_eq!(new_tasks, vec![]);
+        assert_eq!(new_tasks, vec![Task::from_str("do an thing").unwrap()]);
         assert_eq!(
             changes,
             vec![(
                 Task::from_str("do a thing").unwrap(),
-                vec![
-                    vec![Subject("do a thing".to_string(), "do an thing".to_string())],
-                    vec![Copied, Finished(true)],
-                ],
+                vec![vec![Finished(true)]],
             )]
         );
     }

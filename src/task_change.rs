@@ -565,7 +565,7 @@ mod tests {
         cmp_tasks_3way(
             &Task::from_str(from).unwrap(),
             &Task::from_str(left).unwrap(),
-            &Task::from_str(right).unwrap()
+            &Task::from_str(right).unwrap(),
         )
     }
 
@@ -576,7 +576,6 @@ mod tests {
         assert_eq!(cmp3("do a thing", "do an thing", "do a thingie"), Less);
         assert_eq!(cmp3("do a thing", "x do a thing", "do any thing"), Less);
     }
-
 
     fn tasks_from_strings(strings: Vec<&str>) -> Vec<Task> {
         strings
@@ -609,7 +608,10 @@ mod tests {
         let to = tasks_from_strings(vec!["x do a thing", "x do a thing"]);
         let (new_tasks, changes) = compute_changeset(from, to, 0);
 
-        assert_eq!(new_tasks, tasks_from_strings(vec!["x do a thing", "x do a thing"]));
+        assert_eq!(
+            new_tasks,
+            tasks_from_strings(vec!["x do a thing", "x do a thing"])
+        );
         assert_eq!(
             changes,
             vec![(Task::from_str("do a thing").unwrap(), vec![])]
@@ -642,11 +644,17 @@ mod tests {
             vec![
                 (
                     Task::from_str("do a thing").unwrap(),
-                    vec![vec![Subject("do a thing".to_string(), "do an thing".to_string())]],
+                    vec![vec![Subject(
+                        "do a thing".to_string(),
+                        "do an thing".to_string(),
+                    )]],
                 ),
                 (
                     Task::from_str("eat a hamburger").unwrap(),
-                    vec![vec![Subject("eat a hamburger".to_string(), "drink a hamburger".to_string())]],
+                    vec![vec![Subject(
+                        "eat a hamburger".to_string(),
+                        "drink a hamburger".to_string(),
+                    )]],
                 ),
             ]
         );
@@ -658,12 +666,13 @@ mod tests {
         assert_eq!(new_tasks, vec![]);
         assert_eq!(
             changes,
-            vec![
-                (
-                    Task::from_str("do a thing").unwrap(),
-                    vec![vec![Subject("do a thing".to_string(), "do an thing".to_string())], vec![Copied, Finished(true)]],
-                ),
-            ]
+            vec![(
+                Task::from_str("do a thing").unwrap(),
+                vec![
+                    vec![Subject("do a thing".to_string(), "do an thing".to_string())],
+                    vec![Copied, Finished(true)],
+                ],
+            )]
         );
     }
 

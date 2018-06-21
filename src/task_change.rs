@@ -396,10 +396,12 @@ pub fn compute_changeset(
     remove_common(&mut from, &mut to);
 
     // Compute for each task the candidate matches, ordered by preference
-    let from_preferences_matrix = from.iter()
+    let from_preferences_matrix = from
+        .iter()
         .map(|t| preferred_task_ids(&t, &to, allowed_divergence))
         .collect::<Vec<Vec<usize>>>();
-    let to_preferences_matrix = to.iter()
+    let to_preferences_matrix = to
+        .iter()
         .map(|t| preferred_task_ids(&t, &from, allowed_divergence))
         .collect::<Vec<Vec<usize>>>();
 

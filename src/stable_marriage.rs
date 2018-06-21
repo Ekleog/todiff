@@ -50,7 +50,8 @@ fn extract_matching(v: Vec<Individual>) -> Vec<Option<usize>> {
 }
 
 fn saturate_matching(men: &mut Vec<Individual>, women: &mut Vec<Individual>) {
-    while let Some(i_man) = men.iter()
+    while let Some(i_man) = men
+        .iter()
         .position(|m| m.cnt_match.is_none() && !m.prefs.is_empty())
     {
         while let Some(i_woman) = men[i_man].pop_preferred_if_unmatched() {

@@ -3,6 +3,7 @@ use ansi_term::{ANSIString, ANSIStrings};
 use ansi_term::{Color, Style};
 use chrono::{Datelike, Duration};
 use diff;
+use itertools::Either;
 use itertools::Itertools;
 use stable_marriage;
 use std;
@@ -10,10 +11,67 @@ use strsim::levenshtein;
 use todo_txt::Date as TaskDate;
 use todo_txt::Task;
 
-#[derive(Debug)]
-pub struct TaskChange {
+// These structs will be used in two stages: first with T=Task when matching tasks together,
+// and then with T=Vec<Changes> when computing actual deltas to be displayed
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ChangedTask<T> {
     orig: Task,
-    to: Vec<Task>,
+    delta: TaskDelta<T>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum TaskDelta<T> {
+    Deleted,
+    Changed(T),
+    Recurred(Vec<T>),
+}
+
+impl<T> IntoIterator for TaskDelta<T> {
+    type Item = T;
+    type IntoIter =
+        Either<<Option<T> as IntoIterator>::IntoIter, <Vec<T> as IntoIterator>::IntoIter>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        use self::TaskDelta::*;
+        match self {
+            Deleted => Either::Left(None),
+            Changed(t) => Either::Left(Some(t)),
+            Recurred(vec) => Either::Right(vec),
+        }.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a TaskDelta<T> {
+    type Item = &'a T;
+    type IntoIter =
+        Either<<Option<&'a T> as IntoIterator>::IntoIter, <&'a Vec<T> as IntoIterator>::IntoIter>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        use self::TaskDelta::*;
+        match self {
+            Deleted => Either::Left(None),
+            Changed(t) => Either::Left(Some(t)),
+            Recurred(vec) => Either::Right(vec),
+        }.into_iter()
+    }
+}
+
+impl<T> TaskDelta<T> {
+    fn iter(&self) -> <&Self as IntoIterator>::IntoIter {
+        self.into_iter()
+    }
+
+    pub fn map<U, F>(self, mut f: F) -> TaskDelta<U>
+    where
+        F: FnMut(T) -> U,
+    {
+        use self::TaskDelta::*;
+        match self {
+            Deleted => Deleted,
+            Changed(t) => Changed(f(t)),
+            Recurred(vec) => Recurred(vec.into_iter().map(f).collect::<Vec<_>>()),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -316,16 +374,16 @@ fn remove_common<T: Clone + Eq>(a: &mut Vec<T>, b: &mut Vec<T>) {
     }
 }
 
-fn has_been_recurred(chgs: &Vec<Vec<Changes>>) -> bool {
-    chgs.iter().flat_map(|c| c).any(is_recurred)
+fn has_been_recurred(x: &ChangedTask<Vec<Changes>>) -> bool {
+    x.delta.iter().flat_map(|c| c).any(is_recurred)
 }
 
-fn has_been_completed(chgs: &Vec<Vec<Changes>>) -> bool {
-    chgs.iter().flat_map(|c| c).any(is_completion)
+fn has_been_completed(x: &ChangedTask<Vec<Changes>>) -> bool {
+    x.delta.iter().flat_map(|c| c).any(is_completion)
 }
 
-fn has_been_postponed(chgs: &Vec<Vec<Changes>>) -> bool {
-    chgs.iter().flat_map(|c| c).any(is_postponed)
+fn has_been_postponed(x: &ChangedTask<Vec<Changes>>) -> bool {
+    x.delta.iter().flat_map(|c| c).any(is_postponed)
 }
 
 fn uncomplete(t: &Task) -> Task {
@@ -335,7 +393,7 @@ fn uncomplete(t: &Task) -> Task {
     res
 }
 
-fn display_changes(colorize: bool, chgs_for_me: Vec<Changes>) {
+fn display_changes(colorize: bool, chgs_for_me: &Vec<Changes>) {
     use itertools::Position::*;
     print!("    → ");
     for c in chgs_for_me.into_iter().with_position() {
@@ -391,7 +449,9 @@ pub fn compute_changeset(
     mut from: Vec<Task>,
     mut to: Vec<Task>,
     allowed_divergence: usize,
-) -> (Vec<Task>, Vec<(Task, Vec<Vec<Changes>>)>) {
+) -> (Vec<Task>, Vec<ChangedTask<Vec<Changes>>>) {
+    use self::TaskDelta::*;
+
     // Remove elements in common
     remove_common(&mut from, &mut to);
 
@@ -413,97 +473,124 @@ pub fn compute_changeset(
     let mut from = from.into_iter().map(Some).collect::<Vec<Option<Task>>>();
 
     // Extract changed, new, and deleted tasks
-    let matches = matching
+    let mut matches = matching
         .into_iter()
         .enumerate()
         .filter_map(|(i, x)| x.map(|x| (i, x)))
-        .map(|(i, j)| (from[i].take().unwrap(), to[j].take().unwrap()))
-        .collect::<Vec<_>>();
-
-    let new_tasks = to.into_iter().flat_map(|x| x);
-
-    let deleted_tasks = from.into_iter().flat_map(|x| x);
-
-    let mut changes = matches
-        .into_iter()
-        .map(|(l, r)| {
-            let changes = changes_between(&l, &r, true);
-            (l, vec![changes])
-        })
-        .chain(deleted_tasks.map(|t| (t, vec![])))
-        .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
-
-    // Detect recurred tasks
-    let new_tasks = new_tasks
-        .filter(|x| {
-            let best_match = changes
-                .iter_mut()
-                .filter(|(t, _)| t.tags.get("rec").is_some())
-                .filter(|(_, delta)| delta.len() != 0)
-                .filter(|(t, _)| is_task_admissible(&x, t, allowed_divergence))
-                .min_by(|(left, _), (right, _)| cmp_tasks_3way(&x, &left, &right));
-            if let Some((ref mut best, ref mut delta)) = best_match {
-                let changes = changes_between(&best, &x, false);
-                delta.push(changes);
-                false
+        .map(|(i, j)| {
+            let from = from[i].take().unwrap();
+            let to = to[j].take().unwrap();
+            let delta = if from.tags.get("rec").is_some() {
+                Recurred(vec![to])
             } else {
-                true
+                Changed(to)
+            };
+            ChangedTask {
+                orig: from,
+                delta: delta,
+            }
+        })
+        .collect::<Vec<ChangedTask<Task>>>();
+
+    let deleted_tasks = from.into_iter().flat_map(|x| x).map(|t| ChangedTask {
+        orig: t,
+        delta: Deleted,
+    });
+
+    let new_tasks = to
+        .into_iter()
+        .flat_map(|x| x)
+        .flat_map(|x| {
+            // Detect recurred tasks
+            let mut best_match = matches
+                .iter_mut()
+                .filter_map(|x| match x.delta {
+                    Deleted => None,
+                    Changed(_) => None,
+                    Recurred(ref mut vec) => Some((&x.orig, vec)),
+                })
+                .filter(|(t, _)| is_task_admissible(&t, &x, allowed_divergence))
+                .min_by(|(left, _), (right, _)| cmp_tasks_3way(&x, &left, &right));
+            if let Some((_, ref mut delta)) = best_match {
+                delta.push(x);
+                None
+            } else {
+                Some(x)
             }
         })
         .collect::<Vec<_>>();
+
+    let changes = matches
+        .into_iter()
+        .map(|x| {
+            let new_delta = match &x.delta {
+                Deleted => Deleted,
+                Changed(t) => Changed(changes_between(&x.orig, &t, true)),
+                Recurred(tasks) => {
+                    // TODO: compute changes more cleverly
+                    let mut recurred = tasks
+                        .iter()
+                        .enumerate()
+                        .map(|(i, to)| changes_between(&x.orig, to, i == 0))
+                        .collect::<Vec<_>>();
+
+                    if recurred.len() == 1 {
+                        Changed(recurred.remove(0))
+                    } else {
+                        Recurred(recurred)
+                    }
+                }
+            };
+            ChangedTask {
+                orig: x.orig,
+                delta: new_delta,
+            }
+        })
+        .chain(deleted_tasks)
+        .collect::<Vec<ChangedTask<Vec<Changes>>>>();
 
     (new_tasks, changes)
 }
 
 pub fn display_changeset(
-    mut new_tasks: Vec<Task>,
-    mut changes: Vec<(Task, Vec<Vec<Changes>>)>,
+    new_tasks: Vec<Task>,
+    changes: Vec<ChangedTask<Vec<Changes>>>,
     colorize: bool,
 ) {
-    // Sort tasks
-    new_tasks.sort_by_key(|x| x.create_date);
-    changes.sort_by_key(|&(_, ref chgs)| {
-        if has_been_recurred(chgs) {
-            100
-        } else if has_been_completed(chgs) {
-            200
-        } else if has_been_postponed(chgs) {
-            300
-        } else if chgs.is_empty() {
-            400
-        } else {
-            500
-        }
-    });
+    use self::TaskDelta::*;
 
     // Sort changes by category
-    let category_new = new_tasks
-        .iter()
-        .filter(|x| !x.finished)
-        .cloned()
-        .collect::<Vec<Task>>();
+    let (completed_new_tasks, mut category_new) =
+        new_tasks.into_iter().partition::<Vec<_>, _>(|x| x.finished);
+
     let category_deleted = changes
         .iter()
-        .filter(|&&(_, ref to)| to.is_empty())
-        .map(|&(ref from, _)| from.clone())
+        .filter(|x| x.delta == Deleted)
+        .map(|x| x.orig.clone())
         .collect::<Vec<Task>>();
+
     let category_completed = changes
         .iter()
-        .filter(|&&(_, ref to)| has_been_recurred(to) || has_been_completed(to))
+        .filter(|x| has_been_recurred(x) || has_been_completed(x))
         .cloned()
-        .chain(new_tasks.iter().filter(|x| x.finished).map(|x| {
-            let u = uncomplete(x);
-            let mut c = changes_between(&u, &x, true);
+        .chain(completed_new_tasks.into_iter().map(|x| {
+            let u = uncomplete(&x);
+            let c = changes_between(&u, &x, true);
             let mut chgs = vec![Changes::Created];
-            chgs.append(&mut c);
-            (u, vec![chgs])
+            chgs.extend(c);
+            ChangedTask {
+                orig: u,
+                delta: Changed(chgs),
+            }
         }))
-        .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
+        .collect::<Vec<ChangedTask<_>>>();
+
     let category_changed = changes
         .iter()
-        .filter(|&&(_, ref to)| !has_been_recurred(to) && !has_been_completed(to) && !to.is_empty())
+        .filter(|x| !has_been_recurred(x) && !has_been_completed(x) && x.delta != Deleted)
         .cloned()
-        .collect::<Vec<(Task, Vec<Vec<Changes>>)>>();
+        .collect::<Vec<ChangedTask<_>>>();
+
     let no_changes = category_new.is_empty()
         && category_deleted.is_empty()
         && category_completed.is_empty()
@@ -512,7 +599,10 @@ pub fn display_changeset(
     // Nice display
     if no_changes {
         println!("No changes.");
+        return;
     }
+
+    category_new.sort_by_key(|x| x.create_date);
 
     let mut is_first = true;
     if !category_new.is_empty() {
@@ -545,16 +635,16 @@ pub fn display_changeset(
         is_first = false;
         println!("Completed tasks");
         println!("---------------");
-        for (t, c) in category_completed {
+        for x in category_completed {
             println!();
 
-            if has_been_recurred(&c) {
-                println!(" → {}", color(colorize, Green, &t));
+            if has_been_recurred(&x) {
+                println!(" → {}", color(colorize, Green, &x.orig));
             } else {
-                println!(" → {}", color(colorize, Blue, &t));
+                println!(" → {}", color(colorize, Blue, &x.orig));
             }
 
-            for chgs in c {
+            for chgs in x.delta.iter() {
                 display_changes(colorize, chgs);
             }
         }
@@ -566,16 +656,16 @@ pub fn display_changeset(
         }
         println!("Changed tasks");
         println!("-------------");
-        for (t, c) in category_changed {
+        for x in category_changed {
             println!();
 
-            if has_been_postponed(&c) {
-                println!(" → {}", color(colorize, Yellow, &t));
+            if has_been_postponed(&x) {
+                println!(" → {}", color(colorize, Yellow, &x.orig));
             } else {
-                println!(" → {}", t);
+                println!(" → {}", x.orig);
             }
 
-            for chgs in c {
+            for chgs in x.delta.iter() {
                 display_changes(colorize, chgs);
             }
         }
@@ -584,6 +674,7 @@ pub fn display_changeset(
 
 #[cfg(test)]
 mod tests {
+    use super::TaskDelta::*;
     use super::*;
     use std::str::FromStr;
     use todo_txt::Task;
@@ -608,6 +699,21 @@ mod tests {
         strings
             .into_iter()
             .map(|x| Task::from_str(&x).unwrap())
+            .collect()
+    }
+
+    fn changes_from_strings(
+        changes: Vec<(&str, TaskDelta<Vec<Changes>>)>,
+    ) -> Vec<ChangedTask<Vec<Changes>>> {
+        changes
+            .into_iter()
+            .map(|(str, delta)| {
+                let t = Task::from_str(str).unwrap();
+                ChangedTask {
+                    orig: t,
+                    delta: delta,
+                }
+            })
             .collect()
     }
 
@@ -639,10 +745,7 @@ mod tests {
             new_tasks,
             tasks_from_strings(vec!["x do a thing", "x do a thing"])
         );
-        assert_eq!(
-            changes,
-            vec![(Task::from_str("do a thing").unwrap(), vec![])]
-        );
+        assert_eq!(changes, changes_from_strings(vec![("do a thing", Deleted)]));
     }
 
     #[test]
@@ -652,10 +755,7 @@ mod tests {
         let (new_tasks, changes) = compute_changeset(from, to, 30);
 
         assert_eq!(new_tasks, tasks_from_strings(vec!["what is this ?"]));
-        assert_eq!(
-            changes,
-            vec![(Task::from_str("do a thing").unwrap(), vec![])]
-        );
+        assert_eq!(changes, changes_from_strings(vec![("do a thing", Deleted)]));
     }
 
     #[test]
@@ -668,22 +768,22 @@ mod tests {
         assert_eq!(new_tasks, vec![]);
         assert_eq!(
             changes,
-            vec![
+            changes_from_strings(vec![
                 (
-                    Task::from_str("do a thing").unwrap(),
-                    vec![vec![Subject(
+                    "do a thing",
+                    Changed(vec![Subject(
                         "do a thing".to_string(),
                         "do an thing".to_string(),
-                    )]],
+                    )]),
                 ),
                 (
-                    Task::from_str("eat a hamburger").unwrap(),
-                    vec![vec![Subject(
+                    "eat a hamburger",
+                    Changed(vec![Subject(
                         "eat a hamburger".to_string(),
                         "drink a hamburger".to_string(),
-                    )]],
+                    )]),
                 ),
-            ]
+            ])
         );
 
         let from = tasks_from_strings(vec!["do a thing"]);
@@ -693,10 +793,7 @@ mod tests {
         assert_eq!(new_tasks, vec![Task::from_str("do an thing").unwrap()]);
         assert_eq!(
             changes,
-            vec![(
-                Task::from_str("do a thing").unwrap(),
-                vec![vec![Finished(true)]],
-            )]
+            changes_from_strings(vec![("do a thing", Changed(vec![Finished(true)]))])
         );
     }
 
@@ -717,17 +814,17 @@ mod tests {
         assert_eq!(new_tasks, tasks_from_strings(vec!["2018-04-08 bar"]));
         assert_eq!(
             changes,
-            vec![(
-                Task::from_str("2018-04-08 foo due:2018-04-08 rec:1d").unwrap(),
-                vec![
+            changes_from_strings(vec![(
+                "2018-04-08 foo due:2018-04-08 rec:1d",
+                Recurred(vec![
                     vec![FinishedAt(TaskDate::from_ymd(2018, 4, 8))],
                     vec![
                         RecurredFrom(TaskDate::from_ymd(2018, 4, 8)),
                         FinishedAt(TaskDate::from_ymd(2018, 4, 8)),
                     ],
                     vec![Copied, PostponedStrictBy(Duration::days(2))],
-                ],
-            )]
+                ]),
+            )])
         );
 
         // TODO: Unwanted behaviour
@@ -741,9 +838,9 @@ mod tests {
         assert_eq!(new_tasks, vec![]);
         assert_eq!(
             changes,
-            vec![(
-                Task::from_str("2018-06-01 foo due:2018-06-20 rec:1m").unwrap(),
-                vec![
+            changes_from_strings(vec![(
+                "2018-06-01 foo due:2018-06-20 rec:1m",
+                Recurred(vec![
                     vec![
                         FinishedAt(TaskDate::from_ymd(2018, 6, 17)),
                         PostponedStrictBy(Duration::days(-5)),
@@ -756,8 +853,8 @@ mod tests {
                             Some(TaskDate::from_ymd(2018, 6, 17)),
                         ),
                     ],
-                ],
-            )]
+                ]),
+            )])
         );
     }
 }

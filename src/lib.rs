@@ -12,5 +12,6 @@ extern crate todo_txt;
 #[macro_use]
 extern crate pretty_assertions;
 
+pub mod compute_changes;
+pub mod display_changes;
 pub mod stable_marriage;
-pub mod task_change;

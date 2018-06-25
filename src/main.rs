@@ -12,7 +12,8 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
-use todiff::task_change::*;
+use todiff::compute_changes::*;
+use todiff::display_changes::*;
 use todo_txt::Task;
 
 fn is_a_tty() -> bool {

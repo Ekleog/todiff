@@ -17,6 +17,7 @@ extern crate serde_derive;
 
 pub mod compute_changes;
 pub mod display_changes;
+pub mod merge_changes;
 pub mod stable_marriage;
 
 #[cfg(all(test, not(feature = "integration_tests")))]

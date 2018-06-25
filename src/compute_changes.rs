@@ -1,5 +1,6 @@
 use chrono::{Datelike, Duration};
 use itertools::Either;
+use itertools::Itertools;
 use stable_marriage;
 use std;
 use strsim::levenshtein;
@@ -77,7 +78,6 @@ impl<T> TaskDelta<T> {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Changes {
     Created,
-    Copied,
     RecurredStrict,
     RecurredFrom(TaskDate),
 
@@ -95,20 +95,22 @@ pub enum Changes {
     Tags(Vec<(String, String)>, Vec<(String, String)>),
 }
 
-fn postpone_days(from: &Task, to: &Task) -> Option<Duration> {
+fn delta_task_dates(from: &Task, to: &Task) -> Option<Duration> {
     if let Some(from_due) = from.due_date {
         if let Some(to_due) = to.due_date {
-            if from.threshold_date == None && to.threshold_date == None {
-                return Some(to_due.signed_duration_since(from_due));
-            }
-            if let Some(from_thresh) = from.threshold_date {
-                if let Some(to_thresh) = to.threshold_date {
-                    if to_due.signed_duration_since(from_due)
-                        == to_thresh.signed_duration_since(from_thresh)
-                    {
-                        return Some(to_due.signed_duration_since(from_due));
+            match (from.threshold_date, to.threshold_date) {
+                (None, None) => {
+                    let due_delta = to_due.signed_duration_since(from_due);
+                    return Some(due_delta);
+                }
+                (Some(from_thresh), Some(to_thresh)) => {
+                    let due_delta = to_due.signed_duration_since(from_due);
+                    let thresh_delta = to_thresh.signed_duration_since(from_thresh);
+                    if due_delta == thresh_delta {
+                        return Some(due_delta);
                     }
                 }
+                _ => {}
             }
         }
     }
@@ -139,48 +141,42 @@ fn add_recspec_to_date(date: TaskDate, recspec: &str) -> Option<TaskDate> {
     }
 }
 
-pub fn changes_between(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
+fn recur_task(from: &Task, recspec: &str) -> (Task, Changes) {
+    let is_strict = recspec.chars().next() == Some('+');
+    let stripped_recspec = if is_strict {
+        let mut c = recspec.chars();
+        c.next();
+        c.collect::<String>()
+    } else {
+        recspec.to_owned()
+    };
+    let mut new_task = uncomplete(from);
+
+    let from_finish = from.finish_date;
+    let (start_date, change) = if is_strict {
+        let from_due = from.due_date;
+        (from_due, Changes::RecurredStrict)
+    } else {
+        //TODO: handle lack of finish date
+        (from_finish, Changes::RecurredFrom(from_finish.unwrap()))
+    };
+    let new_due = start_date.and_then(|d| add_recspec_to_date(d, &stripped_recspec));
+    new_task.due_date = new_due;
+    if let Some(_) = from_finish {
+        new_task.create_date = from_finish;
+    }
+
+    (new_task, change)
+}
+
+pub fn changes_between(from: &Task, to: &Task) -> Vec<Changes> {
     use self::Changes::*;
 
     let mut res = Vec::new();
-    let mut done_recurred = false;
+
+    // Completion
     let mut done_finished_at = false;
-    let mut done_postponed_strict = false;
-
-    // First, things that may trigger a removal of the `copied` item
-    if !is_first && from.tags.get("rec") == to.tags.get("rec") {
-        if let (Some(r), Some(_), Some(from_due), Some(to_due)) = (
-            from.tags.get("rec"),
-            postpone_days(from, to),
-            from.due_date,
-            to.due_date,
-        ) {
-            if r.chars().next() == Some('+') {
-                let mut c = r.chars();
-                c.next();
-                let r = c.collect::<String>();
-                if add_recspec_to_date(from_due, &r) == Some(to_due) {
-                    res.push(RecurredStrict);
-                    done_recurred = true;
-                }
-            } else {
-                if let Some(to_create) = to.create_date {
-                    if add_recspec_to_date(to_create, &r) == Some(to_due) {
-                        res.push(RecurredFrom(to_create));
-                        done_recurred = true;
-                    }
-                }
-            }
-        }
-    }
-
-    // Then, the `copied` item
-    if !done_recurred && !is_first {
-        res.push(Copied);
-    }
-
-    // Then, the optimizations handling multiple changes at once
-    if from.finished == false
+    if (from.finished == false)
         && to.finished == true
         && from.finish_date.is_none()
         && to.finish_date.is_some()
@@ -188,26 +184,32 @@ pub fn changes_between(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
         res.push(FinishedAt(to.finish_date.expect("Internal error E005")));
         done_finished_at = true;
     }
-    if !done_recurred && from.due_date != to.due_date {
-        if let Some(d) = postpone_days(from, to) {
-            res.push(PostponedStrictBy(d));
-            done_postponed_strict = true;
-        }
-    }
-
-    // And then add the changes that we couldn't cram into one of the optimized versions
-    if !done_recurred && !done_postponed_strict && from.threshold_date != to.threshold_date {
-        res.push(ThresholdDate(from.threshold_date, to.threshold_date));
-    }
-    if !done_recurred && !done_postponed_strict && from.due_date != to.due_date {
-        res.push(DueDate(from.due_date, to.due_date));
-    }
     if !done_finished_at && from.finished != to.finished {
         res.push(Finished(to.finished));
     }
     if !done_finished_at && from.finish_date != to.finish_date {
         res.push(FinishDate(from.finish_date, to.finish_date));
     }
+
+    // Dates
+    let mut done_postponed_strict = false;
+    if from.due_date != to.due_date {
+        if let Some(d) = delta_task_dates(from, to) {
+            res.push(PostponedStrictBy(d));
+            done_postponed_strict = true;
+        }
+    }
+    if !done_postponed_strict && from.threshold_date != to.threshold_date {
+        res.push(ThresholdDate(from.threshold_date, to.threshold_date));
+    }
+    if !done_postponed_strict && from.due_date != to.due_date {
+        res.push(DueDate(from.due_date, to.due_date));
+    }
+    if from.create_date != to.create_date {
+        res.push(CreateDate(from.create_date, to.create_date));
+    }
+
+    // Other changes
     if from.priority != to.priority {
         let from_prio;
         if from.priority < 26 {
@@ -224,9 +226,6 @@ pub fn changes_between(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
         if !(done_finished_at && to_prio.is_none()) {
             res.push(Priority(from_prio, to_prio));
         }
-    }
-    if !done_recurred && from.create_date != to.create_date {
-        res.push(CreateDate(from.create_date, to.create_date));
     }
     if from.tags != to.tags {
         let mut from_t = from
@@ -246,6 +245,13 @@ pub fn changes_between(from: &Task, to: &Task, is_first: bool) -> Vec<Changes> {
         res.push(Subject(from.subject.clone(), to.subject.clone()));
     }
     res
+}
+
+fn changes_between_rec(from: &Task, to: &Task, recspec: &str) -> Vec<Changes> {
+    let (virtual_task, recur_change) = recur_task(from, recspec);
+    std::iter::once(recur_change)
+        .chain(changes_between(&virtual_task, &to))
+        .collect::<Vec<Changes>>()
 }
 
 fn remove_common<T: Clone + Eq>(a: &mut Vec<T>, b: &mut Vec<T>) {
@@ -354,13 +360,13 @@ pub fn compute_changeset(
             let mut best_match = matches
                 .iter_mut()
                 .filter_map(|x| match x.delta {
-                    Recurred(ref mut vec) => Some((&x.orig, vec)),
+                    Recurred(ref mut recurred) => Some((&x.orig, recurred)),
                     _ => None,
                 })
                 .filter(|(t, _)| is_task_admissible(t, &x, allowed_divergence))
                 .min_by(|(left, _), (right, _)| cmp_tasks_3way(&x, left, right));
-            if let Some((_, ref mut delta)) = best_match {
-                delta.push(x);
+            if let Some((_, ref mut recurred)) = best_match {
+                recurred.push(x);
                 None
             } else {
                 Some(x)
@@ -370,28 +376,31 @@ pub fn compute_changeset(
 
     let changes = matches
         .into_iter()
-        .map(|x| {
-            let new_delta = match &x.delta {
+        .map(|ChangedTask { orig, delta }| {
+            let new_delta = match delta {
                 Identical => Identical,
                 Deleted => Deleted,
-                Changed(t) => Changed(changes_between(&x.orig, &t, true)),
-                Recurred(tasks) => {
-                    // TODO: compute changes more cleverly
-                    let mut recurred = tasks
-                        .iter()
-                        .enumerate()
-                        .map(|(i, to)| changes_between(&x.orig, to, i == 0))
-                        .collect::<Vec<_>>();
-
-                    if recurred.len() == 1 {
-                        Changed(recurred.remove(0))
+                Changed(t) => Changed(changes_between(&orig, &t)),
+                Recurred(mut tasks) => {
+                    tasks.sort_by_key(|t| t.due_date);
+                    let init_change = changes_between(&orig, &tasks[0]);
+                    if tasks.len() == 1 {
+                        Changed(init_change)
                     } else {
-                        Recurred(recurred)
+                        let recspec = orig.tags.get("rec").unwrap();
+                        let rec_changes = tasks
+                            .into_iter()
+                            .tuple_windows()
+                            .map(|(t1, t2)| changes_between_rec(&t1, &t2, recspec));
+                        let all_changes = std::iter::once(init_change)
+                            .chain(rec_changes)
+                            .collect::<Vec<_>>();
+                        Recurred(all_changes)
                     }
                 }
             };
             ChangedTask {
-                orig: x.orig,
+                orig: orig,
                 delta: new_delta,
             }
         })

@@ -58,7 +58,6 @@ fn change_str(colorize: bool, c: &Changes) -> Vec<ANSIString> {
     use self::Changes::*;
     match *c {
         Created => vec!["created".into()],
-        Copied => vec!["copied".into()],
         RecurredStrict => vec!["recurred (strict)".into()],
         RecurredFrom(d) => vec![format!("recurred (from {})", d).into()],
 
@@ -176,7 +175,7 @@ pub fn display_changeset(
         .cloned()
         .chain(completed_new_tasks.into_iter().map(|x| {
             let u = uncomplete(&x);
-            let c = changes_between(&u, &x, true);
+            let c = changes_between(&u, &x);
             let mut chgs = vec![Changes::Created];
             chgs.extend(c);
             ChangedTask {

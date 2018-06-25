@@ -19,6 +19,8 @@ example:
     - tell all my friends all about todo.txt t:2010-02-06
     - x eat vegetables due:2010-01-01 rec:+1d
     - x eat vegetables due:2010-01-02 rec:+1d
+    - x eat vegetables due:2010-01-03 rec:+1d
+    - eat vegetables due:2010-01-04 rec:+1d
 
   new:
     - do another thing
@@ -32,6 +34,11 @@ example:
       - # x eat vegetables due:2010-01-02 rec:+1d
         - RecurredStrict
         - Finished(true)
+      - # x eat vegetables due:2010-01-03 rec:+1d
+        - RecurredStrict
+        - Finished(true)
+      - # eat vegetables due:2010-01-04 rec:+1d
+        - RecurredStrict
     - Changed: # tell all my friends about todo.txt t:2010-02-01
       - ThresholdDate(Some(2010-02-01), Some(2010-02-06))
       - Subject("tell all my friends about todo.txt", "tell all my friends all about todo.txt")
@@ -250,16 +257,30 @@ recurrable_changed:
     - Changed:
       - Subject("hello", "hella")
 
-# TODO: Unwanted behaviour
+not_recurred:
+  allowed_divergence: 50
+  from:
+    - 2018-04-08 foo due:2018-04-08 rec:+1d
+
+  to:
+    - x 2018-04-08 2018-04-08 fooo due:2018-04-08 rec:+1d
+
+  new: []
+
+  changes:
+    - Changed:
+      - FinishedAt(2018-04-08)
+      - Subject("foo", "fooo")
+
 simple_strict_recurrence:
   allowed_divergence: 50
   from:
-    - 2018-04-08 foo due:2018-04-08 rec:1d
+    - 2018-04-08 foo due:2018-04-08 rec:+1d
 
   to:
-    - x 2018-04-08 2018-04-08 foo due:2018-04-08 rec:1d
-    - 2018-04-08 foo due:2018-04-10 rec:1d
-    - x 2018-04-08 2018-04-08 foo due:2018-04-09 rec:1d
+    - x 2018-04-08 2018-04-08 foo due:2018-04-08 rec:+1d
+    - 2018-04-08 foo due:2018-04-10 rec:+1d
+    - x 2018-04-08 2018-04-08 foo due:2018-04-09 rec:+1d
     - 2018-04-08 bar
 
   new:
@@ -270,21 +291,19 @@ simple_strict_recurrence:
       -
         - FinishedAt(2018-04-08)
       -
-        - Copied
-        - "PostponedStrictBy(Duration { secs: 172800, nanos: 0 })"
-      -
-        - RecurredFrom(2018-04-08)
+        - RecurredStrict
         - FinishedAt(2018-04-08)
+      -
+        - RecurredStrict
 
-# TODO: Unwanted behaviour
 recurrence_and_postponing:
   allowed_divergence: 50
   from:
-    - 2018-06-01 foo due:2018-06-20 rec:1m
+    - 2018-06-01 foo due:2018-06-20 rec:+1m
 
   to:
-    - x 2018-06-17 2018-06-01 foo due:2018-06-15 rec:1m
-    - 2018-06-17 foo due:2018-07-15 rec:1m
+    - x 2018-06-17 2018-06-01 foo due:2018-06-15 rec:+1m
+    - 2018-06-17 foo due:2018-07-15 rec:+1m
 
   new: []
 
@@ -294,6 +313,22 @@ recurrence_and_postponing:
         - FinishedAt(2018-06-17)
         - "PostponedStrictBy(Duration { secs: -432000, nanos: 0 })"
       -
-        - Copied
-        - "PostponedStrictBy(Duration { secs: 2160000, nanos: 0 })"
-        - CreateDate(Some(2018-06-01), Some(2018-06-17))
+        - RecurredStrict
+
+recurrence_non_strict:
+  allowed_divergence: 50
+  from:
+    - 2018-06-01 foo due:2018-06-20 rec:1m
+
+  to:
+    - x 2018-07-04 2018-06-01 foo due:2018-06-20 rec:1m
+    - 2018-07-04 foo due:2018-08-04 rec:1m
+
+  new: []
+
+  changes:
+    - Recurred:
+      -
+        - FinishedAt(2018-07-04)
+      -
+        - RecurredFrom(2018-07-04)

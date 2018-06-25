@@ -85,6 +85,8 @@ new:
     - Identical
 
 delete:
+  allowed_divergence: 10
+
   from:
     - do a thing
 
@@ -159,6 +161,94 @@ change_subject:
       - Subject("do a thing", "do an thing")
     - Changed:
       - Subject("eat a hamburger", "drink a hamburger")
+
+change_subject_twice:
+  allowed_divergence: 40
+  from:
+    - hello
+    - hello
+
+  to:
+    - helloa
+    - hellob
+
+  new: []
+
+  changes:
+    - Changed:
+      - Subject("hello", "helloa")
+    - Changed:
+      - Subject("hello", "hellob")
+
+change_subject_close:
+  allowed_divergence: 40
+  from:
+    - I sould really go there
+    - I sould really do this
+
+  to:
+    - I sould really go there
+    - I sould really do this
+
+  new: []
+
+  changes:
+    - Identical
+    - Identical
+
+related_to_merges:
+  allowed_divergence: 20
+  from:
+    - conquer the worlds
+    - do a thing
+    - eat some fruit
+
+  to:
+    - conquer the worlds
+    - x do a thing
+    - eat some fruits
+
+  new: []
+
+  changes:
+    - Identical
+    - Changed:
+      - Finished(true)
+    - Changed:
+      - Subject("eat some fruit", "eat some fruits")
+
+change_subject_threshold:
+  allowed_divergence: 20
+  from:
+    - do a thing
+    - eat a hamburger
+
+  to:
+    - do an thing
+    - drink a hamburger
+
+  new:
+    - drink a hamburger
+
+  changes:
+    - Changed:
+      - Subject("do a thing", "do an thing")
+    - Deleted
+
+recurrable_changed:
+  allowed_divergence: 40
+
+  from:
+    - hello rec:+1d
+
+  to:
+    - hella rec:+1d
+
+  new: []
+
+  changes:
+    - Changed:
+      - Subject("hello", "hella")
 
 # TODO: Unwanted behaviour
 simple_strict_recurrence:

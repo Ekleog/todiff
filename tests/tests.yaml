@@ -75,7 +75,6 @@ copy:
 
   changes: []
 
-# TODO: Unwanted behaviour
 copy_and_finish:
   from:
     - do a thing
@@ -86,10 +85,10 @@ copy_and_finish:
 
   new:
     - x do a thing
-    - x do a thing
 
   changes:
-    - Deleted
+    - Changed:
+      - Finished(true)
 
 change_subject_and_finish:
   allowed_divergence: 40

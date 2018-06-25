@@ -14,6 +14,7 @@ pub struct ChangedTask<T> {
     pub delta: TaskDelta<T>,
 }
 
+#[cfg_attr(feature = "integration_tests", derive(Deserialize))]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TaskDelta<T> {
     Deleted,

@@ -3,8 +3,8 @@
 # `to` is the modified list of tasks
 # `new` is the expected list of tasks detected as new
 # `changes` is a list of TaskDelta<Vec<String>> that describes the expected detected
-#     changes. For each entry in `from` (after removal of common tasks), a corresponding
-#     entry in `changes` will contain an object describing the computed changes.
+#     changes. For each entry in `from`, a corresponding entry in `changes`
+#     will contain an object describing the computed changes.
 # Here is an example:
 example:
   allowed_divergence: 20
@@ -36,6 +36,40 @@ example:
       - ThresholdDate(Some(2010-02-01), Some(2010-02-06))
       - Subject("tell all my friends about todo.txt", "tell all my friends all about todo.txt")
 
+
+do_nothing:
+  from:
+    - do a thing
+    - do another thing
+
+  to:
+    - do another thing
+    - do a thing
+
+  new: []
+
+  changes:
+    - Identical
+    - Identical
+
+do_nothing_repeated:
+  from:
+    - do a thing
+    - do a thing
+    - do a thing
+
+  to:
+    - do a thing
+    - do a thing
+    - do a thing
+
+  new: []
+
+  changes:
+    - Identical
+    - Identical
+    - Identical
+
 new:
   from:
     - do a thing
@@ -47,7 +81,8 @@ new:
   new:
     - do another thing
 
-  changes: []
+  changes:
+    - Identical
 
 delete:
   from:
@@ -73,7 +108,8 @@ copy:
   new:
     - do a thing
 
-  changes: []
+  changes:
+    - Identical
 
 copy_and_finish:
   from:

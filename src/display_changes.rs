@@ -188,7 +188,12 @@ pub fn display_changeset(
 
     let category_changed = changes
         .iter()
-        .filter(|x| !has_been_recurred(x) && !has_been_completed(x) && x.delta != Deleted)
+        .filter(|x| {
+            x.delta != Identical
+                && x.delta != Deleted
+                && !has_been_recurred(x)
+                && !has_been_completed(x)
+        })
         .cloned()
         .collect::<Vec<ChangedTask<_>>>();
 

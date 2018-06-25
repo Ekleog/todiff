@@ -17,6 +17,7 @@ pub struct ChangedTask<T> {
 #[cfg_attr(feature = "integration_tests", derive(Deserialize))]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TaskDelta<T> {
+    Identical,
     Deleted,
     Changed(T),
     Recurred(Vec<T>),
@@ -30,6 +31,7 @@ impl<T> IntoIterator for TaskDelta<T> {
     fn into_iter(self) -> Self::IntoIter {
         use self::TaskDelta::*;
         match self {
+            Identical => Either::Left(None),
             Deleted => Either::Left(None),
             Changed(t) => Either::Left(Some(t)),
             Recurred(vec) => Either::Right(vec),
@@ -45,6 +47,7 @@ impl<'a, T> IntoIterator for &'a TaskDelta<T> {
     fn into_iter(self) -> Self::IntoIter {
         use self::TaskDelta::*;
         match self {
+            Identical => Either::Left(None),
             Deleted => Either::Left(None),
             Changed(t) => Either::Left(Some(t)),
             Recurred(vec) => Either::Right(vec),
@@ -63,6 +66,7 @@ impl<T> TaskDelta<T> {
     {
         use self::TaskDelta::*;
         match self {
+            Identical => Identical,
             Deleted => Deleted,
             Changed(t) => Changed(f(t)),
             Recurred(vec) => Recurred(vec.into_iter().map(f).collect::<Vec<_>>()),
@@ -283,53 +287,55 @@ fn preferred_task_ids(t: &Task, tasks: &Vec<Task>, allowed_divergence: usize) ->
     let mut admissibles = tasks
         .iter()
         .enumerate()
-        .filter(|(_, x)| is_task_admissible(&t, &x, allowed_divergence))
+        .filter(|(_, x)| is_task_admissible(&t, x, allowed_divergence))
         .collect::<Vec<_>>();
 
-    admissibles.sort_unstable_by(|(_, left), (_, right)| cmp_tasks_3way(&t, &left, &right));
+    admissibles.sort_unstable_by(|(_, left), (_, right)| cmp_tasks_3way(&t, left, right));
 
     admissibles.into_iter().map(|(i, _)| i).collect::<Vec<_>>()
 }
 
 pub fn compute_changeset(
-    mut from: Vec<Task>,
-    mut to: Vec<Task>,
+    from: Vec<Task>,
+    to: Vec<Task>,
     allowed_divergence: usize,
 ) -> (Vec<Task>, Vec<ChangedTask<Vec<Changes>>>) {
     use self::TaskDelta::*;
 
-    // Remove elements in common
-    remove_common(&mut from, &mut to);
-
     // Compute for each task the candidate matches, ordered by preference
     let from_preferences_matrix = from
         .iter()
-        .map(|t| preferred_task_ids(&t, &to, allowed_divergence))
+        .map(|t| preferred_task_ids(t, &to, allowed_divergence))
         .collect::<Vec<Vec<usize>>>();
     let to_preferences_matrix = to
         .iter()
-        .map(|t| preferred_task_ids(&t, &from, allowed_divergence))
+        .map(|t| preferred_task_ids(t, &from, allowed_divergence))
         .collect::<Vec<Vec<usize>>>();
 
     // Compute a stable matching between the two task lists
     let (matching, _) =
         stable_marriage::stable_marriage(from_preferences_matrix, to_preferences_matrix);
 
+    // Prepare `to` to be able to selectively move tasks out of it without invalidating indices
     let mut to = to.into_iter().map(Some).collect::<Vec<Option<Task>>>();
-    let mut from = from.into_iter().map(Some).collect::<Vec<Option<Task>>>();
 
-    // Extract changed, new, and deleted tasks
+    // Extract changed and deleted tasks
     let mut matches = matching
         .into_iter()
-        .enumerate()
-        .filter_map(|(i, x)| x.map(|x| (i, x)))
-        .map(|(i, j)| {
-            let from = from[i].take().unwrap();
-            let to = to[j].take().unwrap();
-            let delta = if from.tags.get("rec").is_some() {
-                Recurred(vec![to])
-            } else {
-                Changed(to)
+        .zip(from.into_iter())
+        .map(|(i, from)| {
+            let delta = match i {
+                Some(i) => {
+                    let to = to[i].take().unwrap();
+                    if from == to {
+                        Identical
+                    } else if from.tags.get("rec").is_some() && !from.finished {
+                        Recurred(vec![to])
+                    } else {
+                        Changed(to)
+                    }
+                }
+                None => Deleted,
             };
             ChangedTask {
                 orig: from,
@@ -338,25 +344,21 @@ pub fn compute_changeset(
         })
         .collect::<Vec<ChangedTask<Task>>>();
 
-    let deleted_tasks = from.into_iter().flat_map(|x| x).map(|t| ChangedTask {
-        orig: t,
-        delta: Deleted,
-    });
-
+    // Extract new tasks
     let new_tasks = to
         .into_iter()
+        // Get only the remaining Some(task)
         .flat_map(|x| x)
+        // Separate recurred tasks from actual new ones
         .flat_map(|x| {
-            // Detect recurred tasks
             let mut best_match = matches
                 .iter_mut()
                 .filter_map(|x| match x.delta {
-                    Deleted => None,
-                    Changed(_) => None,
                     Recurred(ref mut vec) => Some((&x.orig, vec)),
+                    _ => None,
                 })
-                .filter(|(t, _)| is_task_admissible(&t, &x, allowed_divergence))
-                .min_by(|(left, _), (right, _)| cmp_tasks_3way(&x, &left, &right));
+                .filter(|(t, _)| is_task_admissible(t, &x, allowed_divergence))
+                .min_by(|(left, _), (right, _)| cmp_tasks_3way(&x, left, right));
             if let Some((_, ref mut delta)) = best_match {
                 delta.push(x);
                 None
@@ -370,6 +372,7 @@ pub fn compute_changeset(
         .into_iter()
         .map(|x| {
             let new_delta = match &x.delta {
+                Identical => Identical,
                 Deleted => Deleted,
                 Changed(t) => Changed(changes_between(&x.orig, &t, true)),
                 Recurred(tasks) => {
@@ -392,7 +395,6 @@ pub fn compute_changeset(
                 delta: new_delta,
             }
         })
-        .chain(deleted_tasks)
         .collect::<Vec<ChangedTask<Vec<Changes>>>>();
 
     (new_tasks, changes)

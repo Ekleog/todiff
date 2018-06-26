@@ -2,7 +2,7 @@ extern crate clap;
 extern crate todiff;
 extern crate todo_txt;
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
 use todiff::merge_changes::*;
@@ -22,7 +22,7 @@ fn read_tasks(path: &str) -> Vec<Task> {
     res
 }
 
-fn main() {
+fn main_exitcode() -> i32 {
     // Read arguments
     let matches = clap::App::new("todiff-merge")
         .version(env!("CARGO_PKG_VERSION"))
@@ -42,17 +42,38 @@ fn main() {
                                            else { Err("must be between 0 and 100".to_owned()) }))
              .default_value("75")
              .help("Similarity index to consider two tasks identical (in percents, higher is more restrictive)"))
+        .arg(clap::Arg::with_name("overwrite")
+             .long("overwrite")
+             .takes_value(false)
+             .help("Overwrites <CURRENT> with the result of the merge, as expected by git"))
         .get_matches();
 
     let similarity_option = matches.value_of("similarity").expect("Internal error E011");
     let similarity = similarity_option
         .parse::<usize>()
         .expect("Internal error E012");
+    let overwrite = matches.is_present("overwrite");
     let allowed_divergence = 100 - similarity;
 
+    let current = matches.value_of("CURRENT").expect("Internal error E002");
     let from = read_tasks(matches.value_of("ANCESTOR").expect("Internal error E001"));
-    let left = read_tasks(matches.value_of("CURRENT").expect("Internal error E002"));
-    let right = read_tasks(matches.value_of("OTHER").expect("Internal error E002"));
+    let left = read_tasks(current);
+    let right = read_tasks(matches.value_of("OTHER").expect("Internal error E003"));
+
     let changes = merge_3way(from, left, right, allowed_divergence);
-    println!("{}", merge_to_string(changes));
+    let success = merge_successful(&changes);
+    let output = merge_to_string(changes);
+
+    if overwrite {
+        fs::write(current, output).expect(&format!("Unable to write to file ‘{}’", current));
+    } else {
+        println!("{}", output);
+    }
+    return if success { 0 } else { 1 };
+}
+
+// Need a separate function because exit() does not run destructors
+fn main() {
+    let exit_code = main_exitcode();
+    std::process::exit(exit_code);
 }

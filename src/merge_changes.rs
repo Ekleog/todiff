@@ -60,7 +60,6 @@ pub fn merge_3way(
 }
 
 pub fn merge_to_string(merge: Vec<MergeResult<Task>>) -> String {
-    use self::MergeResult::*;
     merge
         .into_iter()
         .flat_map(|m| match m.map(|t| Task::to_string(&t)) {
@@ -76,4 +75,11 @@ pub fn merge_to_string(merge: Vec<MergeResult<Task>>) -> String {
                 .collect::<Vec<_>>(),
         })
         .join("\n")
+}
+
+pub fn merge_successful(merge: &Vec<MergeResult<Task>>) -> bool {
+    merge.iter().all(|x| match x {
+        Merged(_) => true,
+        Conflict(_, _, _) => false,
+    })
 }

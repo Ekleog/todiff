@@ -1,23 +1,12 @@
-extern crate ansi_term;
-extern crate atty;
 extern crate clap;
 extern crate todiff;
 extern crate todo_txt;
 
-use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
-use todiff::compute_changes::*;
-use todiff::display_changes::*;
+use todiff::merge_changes::*;
 use todo_txt::Task;
-
-fn is_a_tty() -> bool {
-    atty::is(atty::Stream::Stdout)
-}
-fn is_term_dumb() -> bool {
-    env::var("TERM").ok() == Some(String::from("dumb"))
-}
 
 fn read_tasks(path: &str) -> Vec<Task> {
     let file = File::open(path).expect(&format!("Unable to open file ‘{}’", path));
@@ -35,20 +24,15 @@ fn read_tasks(path: &str) -> Vec<Task> {
 
 fn main() {
     // Read arguments
-    let matches = clap::App::new("todiff")
+    let matches = clap::App::new("todiff-merge")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Leo Gaspard <todiff@leo.gaspard.ninja>")
-        .about("Diffs two todo.txt files")
+        .about("Performs a 3-way merge of todo.txt files")
         .args_from_usage("
-            <BEFORE>        'The file to diff from'
-            <AFTER>         'The file to diff to'
+            <ANCESTOR>      'The original file'
+            <CURRENT>       'The first file to merge'
+            <OTHER>         'The second file to merge'
         ")
-        .arg(clap::Arg::with_name("color")
-            .long("color")
-            .takes_value(true)
-            .possible_values(&["auto", "always", "never"])
-            .default_value("auto")
-            .help("Colorize the output"))
         .arg(clap::Arg::with_name("similarity")
              .long("similarity")
              .takes_value(true)
@@ -60,23 +44,15 @@ fn main() {
              .help("Similarity index to consider two tasks identical (in percents, higher is more restrictive)"))
         .get_matches();
 
-    let color_option = matches.value_of("color").expect("Internal error E009");
-    let colorize = match color_option {
-        "never" => false,
-        "always" => true,
-        "auto" => is_a_tty() && !is_term_dumb(),
-        _ => panic!("Internal error E010"),
-    };
-
     let similarity_option = matches.value_of("similarity").expect("Internal error E011");
     let similarity = similarity_option
         .parse::<usize>()
         .expect("Internal error E012");
     let allowed_divergence = 100 - similarity;
 
-    // Read files
-    let from = read_tasks(matches.value_of("BEFORE").expect("Internal error E001"));
-    let to = read_tasks(matches.value_of("AFTER").expect("Internal error E002"));
-    let (new_tasks, changes) = compute_changeset(from, to, allowed_divergence);
-    display_changeset(new_tasks, changes, colorize);
+    let from = read_tasks(matches.value_of("ANCESTOR").expect("Internal error E001"));
+    let left = read_tasks(matches.value_of("CURRENT").expect("Internal error E002"));
+    let right = read_tasks(matches.value_of("OTHER").expect("Internal error E002"));
+    let changes = merge_3way(from, left, right, allowed_divergence);
+    println!("{}", merge_to_string(changes));
 }

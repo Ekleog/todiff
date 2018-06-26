@@ -283,16 +283,30 @@ fn cmp_tasks_3way(from: &Task, left: &Task, right: &Task) -> std::cmp::Ordering 
     }
 }
 
-fn preferred_task_ids(t: &Task, tasks: &Vec<Task>, allowed_divergence: usize) -> Vec<usize> {
-    let mut admissibles = tasks
-        .iter()
-        .enumerate()
-        .filter(|(_, x)| is_task_admissible(&t, x, allowed_divergence))
-        .collect::<Vec<_>>();
+struct TaskMatcher {
+    allowed_divergence: usize,
+}
 
-    admissibles.sort_unstable_by(|(_, left), (_, right)| cmp_tasks_3way(&t, left, right));
+impl stable_marriage::Matcher for TaskMatcher {
+    type Item = Task;
+    type Target = Task;
 
-    admissibles.into_iter().map(|(i, _)| i).collect::<Vec<_>>()
+    fn is_admissible(&self, x: &Self::Item, y: &Self::Target) -> bool {
+        is_task_admissible(x, y, self.allowed_divergence)
+    }
+
+    fn is_perfect_match(&self, x: &Self::Item, y: &Self::Target) -> bool {
+        x == y
+    }
+
+    fn cmp_3way(
+        &self,
+        from: &Self::Item,
+        left: &Self::Target,
+        right: &Self::Target,
+    ) -> std::cmp::Ordering {
+        cmp_tasks_3way(from, left, right)
+    }
 }
 
 pub fn compute_changeset(
@@ -302,31 +316,19 @@ pub fn compute_changeset(
 ) -> (Vec<Task>, Vec<ChangedTask<Vec<Changes>>>) {
     use self::TaskDelta::*;
 
-    // Compute for each task the candidate matches, ordered by preference
-    let from_preferences_matrix = from
-        .iter()
-        .map(|t| preferred_task_ids(t, &to, allowed_divergence))
-        .collect::<Vec<Vec<usize>>>();
-    let to_preferences_matrix = to
-        .iter()
-        .map(|t| preferred_task_ids(t, &from, allowed_divergence))
-        .collect::<Vec<Vec<usize>>>();
+    let matcher = TaskMatcher {
+        allowed_divergence: allowed_divergence,
+    };
 
     // Compute a stable matching between the two task lists
-    let (matching, _) =
-        stable_marriage::stable_marriage(from_preferences_matrix, to_preferences_matrix);
-
-    // Prepare `to` to be able to selectively move tasks out of it without invalidating indices
-    let mut to = to.into_iter().map(Some).collect::<Vec<Option<Task>>>();
+    let (matches, new_tasks) = stable_marriage::stable_marriage(to, from, &matcher, &matcher);
 
     // Extract changed and deleted tasks
-    let mut matches = matching
+    let mut matches = matches
         .into_iter()
-        .zip(from.into_iter())
-        .map(|(i, from)| {
-            let delta = match i {
-                Some(i) => {
-                    let to = to[i].take().unwrap();
+        .map(|(from, mtch)| {
+            let delta = match mtch {
+                Some(to) => {
                     if from == to {
                         Identical
                     } else if from.tags.get("rec").is_some() && !from.finished {
@@ -345,10 +347,8 @@ pub fn compute_changeset(
         .collect::<Vec<ChangedTask<Task>>>();
 
     // Extract new tasks
-    let new_tasks = to
+    let new_tasks = new_tasks
         .into_iter()
-        // Get only the remaining Some(task)
-        .flat_map(|x| x)
         // Separate recurred tasks from actual new ones
         .flat_map(|x| {
             let mut best_match = matches

@@ -278,8 +278,14 @@ pub fn uncomplete(t: &Task) -> Task {
 }
 
 fn is_task_admissible(from: &Task, other: &Task, allowed_divergence: usize) -> bool {
+    // The levenshtein distance is at least the difference between the lenghts
+    if 100 * (other.subject.len() as i64 - from.subject.len() as i64).abs()
+        > allowed_divergence as i64 * other.subject.len() as i64
+    {
+        return false;
+    }
     let distance = levenshtein(&other.subject, &from.subject);
-    distance * 100 / other.subject.len() <= allowed_divergence
+    distance * 100 <= allowed_divergence * other.subject.len()
 }
 
 // Compares two tasks to determine which is closest to a third task

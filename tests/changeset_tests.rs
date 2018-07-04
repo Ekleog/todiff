@@ -22,10 +22,9 @@ fn tasks_from_strings(strings: Vec<String>) -> Vec<Task> {
         .collect()
 }
 
-use serde::de::Deserializer;
 fn deserialize_tasks<'de, D>(deserializer: D) -> Result<Vec<Task>, D::Error>
 where
-    D: Deserializer<'de>,
+    D: serde::de::Deserializer<'de>,
 {
     use serde::Deserialize;
     <Vec<String>>::deserialize(deserializer).map(tasks_from_strings)
@@ -38,8 +37,7 @@ struct Test {
     from: Vec<Task>,
     #[serde(deserialize_with = "deserialize_tasks")]
     to: Vec<Task>,
-    #[serde(deserialize_with = "deserialize_tasks")]
-    new: Vec<Task>,
+    new: Vec<String>,
     changes: Vec<TaskDelta<Vec<String>>>,
 }
 
@@ -53,11 +51,6 @@ fn run_test(test: Test) {
     let (computed_new, computed_changes) =
         compute_changeset(test.from, test.to, allowed_divergence);
 
-    let new_as_str = test
-        .new
-        .iter()
-        .map(Task::to_string)
-        .collect::<Vec<String>>();
     let computed_new_as_str = computed_new
         .iter()
         .map(Task::to_string)
@@ -70,7 +63,7 @@ fn run_test(test: Test) {
         })
         .collect::<Vec<TaskDelta<Vec<String>>>>();
 
-    assert_eq!(new_as_str, computed_new_as_str);
+    assert_eq!(test.new, computed_new_as_str);
     assert_eq!(test.changes, computed_changes_as_strs);
 }
 

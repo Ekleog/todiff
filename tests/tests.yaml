@@ -242,6 +242,53 @@ change_subject_threshold:
       - Subject("do a thing", "do an thing")
     - Deleted
 
+complete_and_prio:
+  from:
+    - (A) 2010-01-01 conquer the world
+
+  to:
+    - x 2010-01-01 2010-01-01 conquer the world
+
+  new: []
+
+  changes:
+    - Changed:
+      - FinishedAt(2010-01-01)
+
+recur_and_prio:
+  from:
+    - (A) 2010-01-01 conquer the world due:2010-02-01 rec:+1d
+
+  to:
+    - x 2010-01-01 2010-01-01 conquer the world due:2010-02-01 rec:+1d
+    - (A) 2010-01-01 conquer the world due:2010-02-02 rec:+1d
+
+  new: []
+
+  changes:
+    - Recurred:
+      -
+        - FinishedAt(2010-01-01)
+      -
+        - RecurredStrict
+
+recur_and_prio2:
+  from:
+    - (A) 2010-01-01 conquer the world due:2010-02-01 rec:+1d
+
+  to:
+    - x (A) 2010-01-01 2010-01-01 conquer the world due:2010-02-01 rec:+1d
+    - (A) 2010-01-01 conquer the world due:2010-02-02 rec:+1d
+
+  new: []
+
+  changes:
+    - Recurred:
+      -
+        - FinishedAt(2010-01-01)
+      -
+        - RecurredStrict
+
 recurrable_changed:
   allowed_divergence: 40
 

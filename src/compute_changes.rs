@@ -247,8 +247,14 @@ pub fn changes_between(from: &Task, to: &Task) -> Vec<Changes> {
     res
 }
 
-fn changes_between_rec(from: &Task, to: &Task, recspec: &str) -> Vec<Changes> {
-    let (virtual_task, recur_change) = recur_task(from, recspec);
+fn changes_between_rec(from: &Task, to: &Task, orig: &Task) -> Vec<Changes> {
+    let recspec = orig.tags.get("rec").unwrap();
+    let (mut virtual_task, recur_change) = recur_task(from, recspec);
+    // Work around priority being removed on completion
+    if orig.priority < 26 {
+        virtual_task.priority = orig.priority;
+    }
+
     std::iter::once(recur_change)
         .chain(changes_between(&virtual_task, &to))
         .collect::<Vec<Changes>>()
@@ -387,11 +393,10 @@ pub fn compute_changeset(
                     if tasks.len() == 1 {
                         Changed(init_change)
                     } else {
-                        let recspec = orig.tags.get("rec").unwrap();
                         let rec_changes = tasks
                             .into_iter()
                             .tuple_windows()
-                            .map(|(t1, t2)| changes_between_rec(&t1, &t2, recspec));
+                            .map(|(t1, t2)| changes_between_rec(&t1, &t2, &orig));
                         let all_changes = std::iter::once(init_change)
                             .chain(rec_changes)
                             .collect::<Vec<_>>();

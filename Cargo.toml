@@ -12,6 +12,18 @@ diff = "0.1.11"
 itertools = "0.7.8"
 strsim = "0.7.0"
 todo-txt = "1.1.0"
+serde = { version = "1.0", optional = true}
+serde_derive = { version = "1.0", optional = true}
+serde_yaml = { version = "0.7.5", optional = true}
 
 [dev-dependencies]
 pretty_assertions = "0.5.1"
+
+[features]
+default = []
+integration_tests = ["serde", "serde_derive", "serde_yaml"]
+
+[[test]]
+name = "todiff"
+path = "tests/changeset_tests.rs"
+required-features = ["integration_tests"]

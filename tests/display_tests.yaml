@@ -4,26 +4,30 @@
 # `changes` is a string that describes the (uncolored) output expected from running
 #   `todiff from.txt to.txt`
 
-# Unwanted behavior
 postponed_first:
   allowed_divergence: 40
   from:
     - foo due:2018-07-04
     - bar due:2018-07-04
+    - baz due:2018-07-04
 
   to:
     - fool due:2018-07-04
     - bar due:2018-07-05
+    - buz due:2018-07-04
 
   changes: |
     Changed tasks
     -------------
 
+     → bar due:2018-07-04
+        → Postponed (strict) by 1 days
+
      → foo due:2018-07-04
         → Set subject to ‘fool’
 
-     → bar due:2018-07-04
-        → Postponed (strict) by 1 days
+     → baz due:2018-07-04
+        → Set subject to ‘buz’
 
 recurred_then_completed_then_rest:
   allowed_divergence: 50
@@ -43,14 +47,14 @@ recurred_then_completed_then_rest:
     Completed tasks
     ---------------
 
-     → do a thing
-        → Completed
-
      → eat vegetables due:2010-01-01 rec:+1d
         → Completed
         → Recurred (strict) and completed
         → Recurred (strict) and completed
         → Recurred (strict)
+
+     → do a thing
+        → Completed
 
      → tell my friends about todo.txt
         → Created and completed

@@ -166,7 +166,7 @@ pub fn display_changeset(
         .map(|x| x.orig.clone())
         .collect::<Vec<Task>>();
 
-    let category_completed = changes
+    let mut category_completed = changes
         .iter()
         .filter(|x| has_been_recurred(x) || has_been_completed(x))
         .cloned()
@@ -181,7 +181,7 @@ pub fn display_changeset(
         }))
         .collect::<Vec<ChangedTask<_>>>();
 
-    let category_changed = changes
+    let mut category_changed = changes
         .iter()
         .filter(|x| {
             x.delta != Identical
@@ -193,6 +193,16 @@ pub fn display_changeset(
         .collect::<Vec<ChangedTask<_>>>();
 
     category_new.sort_by_key(|x| x.create_date);
+    category_completed.sort_by_key(|x| {
+        if has_been_recurred(x) {
+            100
+        } else if has_been_completed(x) {
+            200
+        } else {
+            500
+        }
+    });
+    category_changed.sort_by_key(|x| if has_been_postponed(x) { 100 } else { 500 });
 
     let mut res = String::new();
     let mut is_first_change = true;

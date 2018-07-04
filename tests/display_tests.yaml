@@ -1,0 +1,73 @@
+# A test is structured as follows:
+# `from` is the original list of tasks
+# `to` is the modified list of tasks
+# `changes` is a string that describes the (uncolored) output expected from running
+#   `todiff from.txt to.txt`
+
+# Unwanted behavior
+postponed_first:
+  allowed_divergence: 40
+  from:
+    - foo due:2018-07-04
+    - bar due:2018-07-04
+
+  to:
+    - fool due:2018-07-04
+    - bar due:2018-07-05
+
+  changes: |
+    Changed tasks
+    -------------
+
+     → foo due:2018-07-04
+        → Set subject to ‘fool’
+
+     → bar due:2018-07-04
+        → Postponed (strict) by 1 days
+
+recurred_then_completed_then_rest:
+  allowed_divergence: 50
+  from:
+    - do a thing
+    - eat vegetables due:2010-01-01 rec:+1d
+
+  to:
+    - x eat vegetables due:2010-01-01 rec:+1d
+    - x tell my friends about todo.txt
+    - x eat vegetables due:2010-01-02 rec:+1d
+    - x eat vegetables due:2010-01-03 rec:+1d
+    - x do a thing
+    - eat vegetables due:2010-01-04 rec:+1d
+
+  changes: |
+    Completed tasks
+    ---------------
+
+     → do a thing
+        → Completed
+
+     → eat vegetables due:2010-01-01 rec:+1d
+        → Completed
+        → Recurred (strict) and completed
+        → Recurred (strict) and completed
+        → Recurred (strict)
+
+     → tell my friends about todo.txt
+        → Created and completed
+
+recurrence_non_strict_no_creationdate:
+  allowed_divergence: 50
+  from:
+    - foo due:2018-06-20 rec:1m
+
+  to:
+    - x foo due:2018-06-20 rec:1m
+    - foo due:2018-08-04 rec:1m
+
+  changes: |
+    Completed tasks
+    ---------------
+
+     → foo due:2018-06-20 rec:1m
+        → Completed
+        → Recurred and added due date 2018-08-04

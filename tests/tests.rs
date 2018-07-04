@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate pretty_assertions;
+extern crate itertools;
 extern crate serde;
 extern crate serde_yaml;
 extern crate todiff;
@@ -8,11 +9,13 @@ extern crate todo_txt;
 extern crate serde_derive;
 
 // Important: for these tests to run, run `cargo test --features=integration_tests`
+use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::str::FromStr;
 use todiff::compute_changes::*;
+use todiff::display_changes::*;
 use todiff::merge_changes::*;
 use todo_txt::Task;
 
@@ -77,6 +80,32 @@ impl Test for ChangesetTest {
 }
 
 #[derive(Deserialize, Debug)]
+struct DisplayTest {
+    allowed_divergence: Option<usize>,
+    #[serde(deserialize_with = "deserialize_tasks")]
+    from: Vec<Task>,
+    #[serde(deserialize_with = "deserialize_tasks")]
+    to: Vec<Task>,
+    changes: String,
+}
+
+impl Test for DisplayTest {
+    fn run(self: DisplayTest) {
+        // Test that the output of the command is as expected
+        let allowed_divergence = self.allowed_divergence.unwrap_or(0);
+        let (new_tasks, changes) =
+            compute_changeset(self.from.clone(), self.to.clone(), allowed_divergence);
+        let output = display_changeset(new_tasks, changes, false);
+
+        // Split into lines to make diff easier to read
+        assert_eq!(
+            self.changes.lines().collect_vec(),
+            output.lines().collect_vec()
+        );
+    }
+}
+
+#[derive(Deserialize, Debug)]
 struct MergeTest {
     allowed_divergence: Option<usize>,
     #[serde(deserialize_with = "deserialize_tasks")]
@@ -114,5 +143,6 @@ fn run_tests_from_yaml<T: Test>(suite: &str, path: &str) {
 #[test]
 fn test_yamls() {
     run_tests_from_yaml::<ChangesetTest>("changeset", "tests/changeset_tests.yaml");
+    run_tests_from_yaml::<DisplayTest>("display", "tests/display_tests.yaml");
     run_tests_from_yaml::<MergeTest>("merge", "tests/merge_tests.yaml");
 }

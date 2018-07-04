@@ -131,33 +131,29 @@ fn change_str(colorize: bool, c: &Changes) -> Vec<ANSIString> {
     }
 }
 
-fn display_changes(colorize: bool, chgs_for_me: &Vec<Changes>) {
+fn display_changes(colorize: bool, chgs_for_me: &Vec<Changes>) -> String {
     use itertools::Position::*;
-    print!("    → ");
-    for c in chgs_for_me.into_iter().with_position() {
-        match c {
+    chgs_for_me
+        .into_iter()
+        .with_position()
+        .map(|c| match c {
             First(c) | Only(c) => {
                 let chg = change_str(colorize, &c);
                 let mut chars = chg[0].chars();
                 let first_char = chars.next().expect("Internal error E004").to_uppercase();
-                print!("{}{}{}", first_char, chars.as_str(), ANSIStrings(&chg[1..]));
+                format!("{}{}{}", first_char, chars.as_str(), ANSIStrings(&chg[1..]))
             }
-            Middle(c) => {
-                print!(", {}", ANSIStrings(&change_str(colorize, &c)));
-            }
-            Last(c) => {
-                print!(" and {}", ANSIStrings(&change_str(colorize, &c)));
-            }
-        };
-    }
-    println!();
+            Middle(c) => format!(", {}", ANSIStrings(&change_str(colorize, &c))),
+            Last(c) => format!(" and {}", ANSIStrings(&change_str(colorize, &c))),
+        })
+        .join("")
 }
 
 pub fn display_changeset(
     new_tasks: Vec<Task>,
     changes: Vec<ChangedTask<Vec<Changes>>>,
     colorize: bool,
-) {
+) -> String {
     use self::TaskDelta::*;
 
     // Sort changes by category
@@ -175,10 +171,9 @@ pub fn display_changeset(
         .filter(|x| has_been_recurred(x) || has_been_completed(x))
         .cloned()
         .chain(completed_new_tasks.into_iter().map(|x| {
-            let u = uncomplete(&x);
-            let c = changes_between(&u, &x);
             let mut chgs = vec![Changes::Created];
-            chgs.extend(c);
+            let u = uncomplete(&x);
+            chgs.extend(changes_between(&u, &x));
             ChangedTask {
                 orig: u,
                 delta: Changed(chgs),
@@ -199,76 +194,79 @@ pub fn display_changeset(
 
     category_new.sort_by_key(|x| x.create_date);
 
+    let mut res = String::new();
     let mut is_first_change = true;
     if !category_new.is_empty() {
         is_first_change = false;
-        println!("New tasks");
-        println!("---------");
-        println!();
+        res += "New tasks\n";
+        res += "---------\n";
+        res += "\n";
         for t in category_new {
-            println!(" → {}", color(colorize, Green, &t));
+            res += &format!(" → {}\n", color(colorize, Green, &t));
         }
     }
 
     if !category_deleted.is_empty() {
         if !is_first_change {
-            println!();
+            res += "\n";
         }
         is_first_change = false;
-        println!("Deleted tasks");
-        println!("-------------");
-        println!();
+        res += "Deleted tasks\n";
+        res += "-------------\n";
+        res += "\n";
         for t in category_deleted {
-            println!(" → {}", color(colorize, Red, &t));
+            res += &format!(" → {}\n", color(colorize, Red, &t));
         }
     }
 
     if !category_completed.is_empty() {
         if !is_first_change {
-            println!();
+            res += "\n";
         }
         is_first_change = false;
-        println!("Completed tasks");
-        println!("---------------");
+        res += "Completed tasks\n";
+        res += "---------------\n";
         for x in category_completed {
-            println!();
+            res += "\n";
 
             if has_been_recurred(&x) {
-                println!(" → {}", color(colorize, Green, &x.orig));
+                res += &format!(" → {}\n", color(colorize, Green, &x.orig));
             } else {
-                println!(" → {}", color(colorize, Blue, &x.orig));
+                res += &format!(" → {}\n", color(colorize, Blue, &x.orig));
             }
 
             for chgs in x.delta.iter() {
-                display_changes(colorize, chgs);
+                res += &format!("    → {}\n", display_changes(colorize, chgs));
             }
         }
     }
 
     if !category_changed.is_empty() {
         if !is_first_change {
-            println!();
+            res += "\n";
         }
         is_first_change = false;
-        println!("Changed tasks");
-        println!("-------------");
+        res += "Changed tasks\n";
+        res += "-------------\n";
         for x in category_changed {
-            println!();
+            res += "\n";
 
             if has_been_postponed(&x) {
-                println!(" → {}", color(colorize, Yellow, &x.orig));
+                res += &format!(" → {}\n", color(colorize, Yellow, &x.orig));
             } else {
-                println!(" → {}", x.orig);
+                res += &format!(" → {}\n", x.orig);
             }
 
             for chgs in x.delta.iter() {
-                display_changes(colorize, chgs);
+                res += &format!("    → {}\n", display_changes(colorize, chgs));
             }
         }
     }
 
     // Nice display
     if is_first_change {
-        println!("No changes.");
+        res += "No changes.\n";
     }
+
+    res
 }

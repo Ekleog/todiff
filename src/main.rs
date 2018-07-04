@@ -78,5 +78,5 @@ fn main() {
     let from = read_tasks(matches.value_of("BEFORE").expect("Internal error E001"));
     let to = read_tasks(matches.value_of("AFTER").expect("Internal error E002"));
     let (new_tasks, changes) = compute_changeset(from, to, allowed_divergence);
-    display_changeset(new_tasks, changes, colorize);
+    println!("{}", display_changeset(new_tasks, changes, colorize));
 }

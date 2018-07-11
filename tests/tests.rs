@@ -121,12 +121,39 @@ impl Test for MergeTest {
     fn run(self: MergeTest) {
         // Test 3-way merges
         let allowed_divergence = self.allowed_divergence.unwrap_or(0);
-        let computed_changes = merge_3way(self.from, self.left, self.right, allowed_divergence);
+        let computed_changes = merge_3way(
+            self.from.clone(),
+            self.left.clone(),
+            self.right.clone(),
+            allowed_divergence,
+        );
         assert_eq!(
             self.result.trim(),
-            merge_to_string(computed_changes),
+            merge_to_string(computed_changes.clone()),
             "Mismatching merge result"
         );
+
+        if let Some(merge_result) = extract_merge_result(computed_changes) {
+            let diff_from_left =
+                compute_changeset(self.from.clone(), self.left.clone(), allowed_divergence);
+            let diff_right_result =
+                compute_changeset(self.right.clone(), merge_result.clone(), allowed_divergence);
+            assert_eq!(
+                display_changeset(diff_from_left.0, diff_from_left.1, false),
+                display_changeset(diff_right_result.0, diff_right_result.1, false),
+                "Mismatching diffs after merge"
+            );
+
+            let diff_from_right =
+                compute_changeset(self.from.clone(), self.right.clone(), allowed_divergence);
+            let diff_left_result =
+                compute_changeset(self.left.clone(), merge_result.clone(), allowed_divergence);
+            assert_eq!(
+                display_changeset(diff_from_right.0, diff_from_right.1, false),
+                display_changeset(diff_left_result.0, diff_left_result.1, false),
+                "Mismatching diffs after merge"
+            );
+        }
     }
 }
 

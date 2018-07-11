@@ -83,3 +83,13 @@ pub fn merge_successful(merge: &Vec<MergeResult<Task>>) -> bool {
         Conflict(_, _, _) => false,
     })
 }
+
+pub fn extract_merge_result(merge: Vec<MergeResult<Task>>) -> Option<Vec<Task>> {
+    merge
+        .into_iter()
+        .map(|x| match x {
+            Merged(t) => Some(t),
+            Conflict(_, _, _) => None,
+        })
+        .collect()
+}

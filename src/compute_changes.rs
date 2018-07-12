@@ -117,27 +117,56 @@ fn delta_task_dates(from: &Task, to: &Task) -> Option<Duration> {
     None
 }
 
-fn add_recspec_to_date(date: TaskDate, recspec: &str) -> Option<TaskDate> {
+fn days_in_month(month: u32, year: i32) -> u32 {
+    let is_leap_year = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    if month == 2 {
+        if is_leap_year {
+            29
+        } else {
+            28
+        }
+    } else if [1, 3, 5, 7, 8, 10, 12].contains(&month) {
+        31
+    } else {
+        30
+    }
+}
+
+// TODO: replace with todo_txt::Extra methods once merged
+fn add_recspec_to_date(date: TaskDate, recspec: &str) -> Result<TaskDate, ()> {
     let mut n = recspec.to_owned();
     n.pop();
-    if let Ok(n) = n.parse::<u16>() {
+    let parsed_recspec = if let Ok(n) = n.parse::<u32>() {
         match recspec.chars().last() {
-            Some('d') => Some(date + Duration::days(n as i64)),
-            Some('w') => Some(date + Duration::weeks(n as i64)),
-            Some('m') => Some(
-                date.with_month0((date.month0() + n as u32) % 12)
-                    .expect("Internal error E006")
-                    .with_year(date.year() + ((date.month0() + n as u32) / 12) as i32)
-                    .expect("Internal error E007"),
-            ),
-            Some('y') => Some(
-                date.with_year(date.year() + n as i32)
-                    .expect("Internal error E008"),
-            ),
-            _ => None,
+            Some('d') => Either::Left(Duration::days(n as i64)),
+            Some('w') => Either::Left(Duration::weeks(n as i64)),
+            Some('m') => Either::Right(n),
+            Some('y') => Either::Right(12 * n),
+            _ => return Err(()),
         }
     } else {
-        None
+        return Err(());
+    };
+
+    match parsed_recspec {
+        Either::Left(d) => Ok(date + d),
+        Either::Right(n) => Ok({
+            // Semantics taken from
+            //  https://github.com/dbeniamine/todo.txt-vim/blob/259125d9efe93f69582f50ef68c17e20fd1e963a/autoload/todo.vim#L531-L538
+            let mut d = date.day();
+            let mut m = date.month();
+            let mut y = date.year();
+            let was_last_day = d == days_in_month(m, y);
+
+            m += n;
+            y += ((m - 1) / 12) as i32;
+            m = (m - 1) % 12 + 1;
+            if was_last_day || d > days_in_month(m, y) {
+                d = days_in_month(m, y);
+            }
+
+            TaskDate::from_ymd_opt(y, m, d).expect("Internal error E006")
+        }),
     }
 }
 
@@ -160,7 +189,7 @@ fn recur_task(from: &Task, recspec: &str) -> (Task, Changes) {
         //TODO: handle lack of finish date
         (from_finish, Changes::RecurredFrom(from_finish.unwrap()))
     };
-    let new_due = start_date.and_then(|d| add_recspec_to_date(d, &stripped_recspec));
+    let new_due = start_date.and_then(|d| add_recspec_to_date(d, &stripped_recspec).ok());
     new_task.due_date = new_due;
     if let Some(_) = from_finish {
         new_task.create_date = from_finish;
@@ -440,5 +469,26 @@ mod tests {
         assert_eq!(cmp3("do a thing", "do a thing", "do an thing"), Less);
         assert_eq!(cmp3("do a thing", "do an thing", "do a thingie"), Less);
         assert_eq!(cmp3("do a thing", "x do a thing", "do any thing"), Less);
+    }
+
+    #[test]
+    fn test_add_recspec() {
+        fn test(from: &str, rec: &str, to: &str) {
+            let from = TaskDate::from_str(from).unwrap();
+            let to = TaskDate::from_str(to).unwrap();
+            assert_eq!(add_recspec_to_date(from, rec), Ok(to));
+        }
+
+        test("2010-01-01", "2d", "2010-01-03");
+        test("2010-01-01", "2w", "2010-01-15");
+        test("2010-01-01", "2m", "2010-03-01");
+        test("2010-01-01", "2y", "2012-01-01");
+
+        test("2010-01-30", "1m", "2010-02-28");
+        test("2010-02-28", "1m", "2010-03-31");
+        test("2010-01-30", "2m", "2010-03-30");
+        test("2010-01-01", "20m", "2011-09-01");
+        test("2003-02-28", "1y", "2004-02-29");
+        test("2004-02-29", "1y", "2005-02-28");
     }
 }

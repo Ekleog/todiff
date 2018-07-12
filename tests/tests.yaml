@@ -378,4 +378,41 @@ recurrence_non_strict:
       -
         - FinishedAt(2018-07-04)
       -
-        - RecurredFrom(2018-07-04)
+        - RecurredFrom(Some(2018-07-04))
+
+recurrence_non_strict_no_finishdate:
+  allowed_divergence: 50
+  from:
+    - 2018-06-01 foo due:2018-06-20 rec:1m
+
+  to:
+    - x 2018-06-01 foo due:2018-06-20 rec:1m
+    - 2018-07-04 foo due:2018-08-04 rec:1m
+
+  new: []
+
+  changes:
+    - Recurred:
+      -
+        - Finished(true)
+      -
+        - RecurredFrom(Some(2018-07-04))
+
+recurrence_non_strict_no_creationdate:
+  allowed_divergence: 50
+  from:
+    - foo due:2018-06-20 rec:1m
+
+  to:
+    - x foo due:2018-06-20 rec:1m
+    - foo due:2018-08-04 rec:1m
+
+  new: []
+
+  changes:
+    - Recurred:
+      -
+        - Finished(true)
+      -
+        - RecurredFrom(None)
+        - DueDate(None, Some(2018-08-04))

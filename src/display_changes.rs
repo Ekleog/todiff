@@ -59,7 +59,8 @@ fn change_str(colorize: bool, c: &Changes) -> Vec<ANSIString> {
     match *c {
         Created => vec!["created".into()],
         RecurredStrict => vec!["recurred (strict)".into()],
-        RecurredFrom(d) => vec![format!("recurred (from {})", d).into()],
+        RecurredFrom(Some(d)) => vec![format!("recurred (from {})", d).into()],
+        RecurredFrom(None) => vec!["recurred".into()],
 
         FinishedAt(d) => vec![format!("completed on {}", d).into()],
         PostponedStrictBy(d) => vec![format!("postponed (strict) by {} days", d.num_days()).into()],

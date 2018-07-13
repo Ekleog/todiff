@@ -1,7 +1,7 @@
 [package]
 name = "todiff"
-version = "0.5.0"
-authors = ["Léo Gaspard <leo@gaspard.io>"]
+version = "0.6.0"
+authors = ["Léo Gaspard <leo@gaspard.io>", "Nadrieril <nadrieril+todiff@gmail.com>"]
 
 [dependencies]
 ansi_term = "0.11.0"

@@ -362,6 +362,24 @@ recurrence_and_postponing:
       -
         - RecurredStrict
 
+recurrence_tricky_date:
+  allowed_divergence: 50
+  from:
+    - 2010-01-01 foo due:2010-01-31 rec:+1m
+
+  to:
+    - x 2010-02-01 2010-01-01 foo due:2010-01-31 rec:+1m
+    - 2010-02-01 foo due:2010-02-28 rec:+1m
+
+  new: []
+
+  changes:
+    - Recurred:
+      -
+        - FinishedAt(2010-02-01)
+      -
+        - RecurredStrict
+
 recurrence_non_strict:
   allowed_divergence: 50
   from:

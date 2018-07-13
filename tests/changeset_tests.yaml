@@ -106,6 +106,21 @@ delete:
   changes:
     - Deleted
 
+empty_subject:
+  allowed_divergence: 100
+
+  from:
+    - do a thing
+
+  to:
+    - ""
+
+  new:
+    - ""
+
+  changes:
+    - Deleted
+
 copy:
   from:
     - do a thing

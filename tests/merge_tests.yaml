@@ -1,0 +1,114 @@
+# A test is structured as follows:
+# `from` is the original list of tasks
+# `left` and `right` are two modified versions of `from`
+# `new` is the expected list of tasks detected as new after merge
+# `result` is a list of MergeResult<Vec<String>> that describes the expected
+#   merged changes. For each entry in `from`, a corresponding entry in `changes`
+#   will contain an object describing the computed changes.
+new:
+  from:
+    - aaaa
+
+  left:
+    - aaaa
+    - bbbb
+    - cccc
+
+  right:
+    - aaaa
+    - dddd
+
+  result: |
+    aaaa
+    bbbb
+    cccc
+    dddd
+
+delete:
+  from:
+    - aaaa
+
+  left:
+    - aaaa
+    - bbbb
+
+  right:
+    - cccc
+
+  result: |
+    bbbb
+    cccc
+
+conflict:
+  allowed_divergence: 20
+  from:
+    - do a thing
+
+  left:
+    - x do a thing
+
+  right:
+    - do an thing
+
+  result: |
+    <<<<<
+    x do a thing
+    |||||
+    do a thing
+    =====
+    do an thing
+    >>>>>
+
+conflict_and_surrounding_changes:
+  allowed_divergence: 20
+  from:
+    - conquer the worlds
+    - do a thing
+    - eat some fruit
+
+  left:
+    - conquer the worlds
+    - x do a thing
+    - eat some fruits
+
+  right:
+    - conquer the world
+    - do an thing
+    - eat some fruit
+
+  result: |
+    conquer the world
+    <<<<<
+    x do a thing
+    |||||
+    do a thing
+    =====
+    do an thing
+    >>>>>
+    eat some fruits
+
+# TODO: better conflict resolution ?
+recurrence_conflict:
+  from:
+    - 2018-04-08 foo due:2018-04-08 rec:+1d
+
+  left:
+    - x 2018-04-08 2018-04-08 foo due:2018-04-08 rec:+1d
+    - 2018-04-08 foo due:2018-04-09 rec:+1d
+
+  right:
+    - x 2018-04-08 2018-04-08 foo due:2018-04-08 rec:+1d
+    - x 2018-04-08 2018-04-08 foo due:2018-04-09 rec:+1d
+    - 2018-04-08 foo due:2018-04-10 rec:+1d
+
+  result: |
+    <<<<<
+    x 2018-04-08 2018-04-08 foo due:2018-04-08 rec:+1d
+    2018-04-08 foo due:2018-04-09 rec:+1d
+    |||||
+    2018-04-08 foo due:2018-04-08 rec:+1d
+    =====
+    x 2018-04-08 2018-04-08 foo due:2018-04-08 rec:+1d
+    x 2018-04-08 2018-04-08 foo due:2018-04-09 rec:+1d
+    2018-04-08 foo due:2018-04-10 rec:+1d
+    >>>>>

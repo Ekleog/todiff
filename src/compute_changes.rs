@@ -292,14 +292,20 @@ fn changes_between_rec(mut from: Task, to: Task, orig: &Task) -> Vec<Changes> {
         .collect::<Vec<Changes>>()
 }
 
-fn remove_common<T: Clone + Eq>(a: &mut Vec<T>, b: &mut Vec<T>) {
-    for x in a.clone().into_iter() {
-        if let Some(b_pos) = b.iter().position(|y| *y == x) {
-            b.remove(b_pos);
-            let a_pos = a.iter().position(|y| *y == x).expect("Internal error E003");
-            a.remove(a_pos);
-        }
-    }
+pub fn remove_common<T: Clone + Eq>(a: &mut Vec<T>, b: &mut Vec<T>) -> Vec<T> {
+    a.clone()
+        .into_iter()
+        .enumerate()
+        .rev()
+        .filter_map(|(i, x)| {
+            if let Some(b_pos) = b.iter().position(|y| *y == x) {
+                b.swap_remove(b_pos);
+                Some(a.swap_remove(i))
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 pub fn uncomplete(t: &Task) -> Task {
@@ -359,11 +365,11 @@ impl stable_marriage::Matcher for TaskMatcher {
     }
 }
 
-pub fn compute_changeset(
+pub fn match_tasks(
     from: Vec<Task>,
     to: Vec<Task>,
     allowed_divergence: usize,
-) -> (Vec<Task>, Vec<ChangedTask<Vec<Changes>>>) {
+) -> (Vec<Task>, Vec<ChangedTask<Task>>) {
     use self::TaskDelta::*;
 
     let matcher = TaskMatcher {
@@ -418,6 +424,38 @@ pub fn compute_changeset(
         })
         .collect::<Vec<_>>();
 
+    let matches = matches
+        .into_iter()
+        .map(|ChangedTask { orig, delta }| {
+            let new_delta = match delta {
+                Recurred(mut recurred) => {
+                    if recurred.len() == 1 {
+                        Changed(recurred.remove(0))
+                    } else {
+                        recurred.sort_by_key(|t| t.due_date);
+                        Recurred(recurred)
+                    }
+                }
+                _ => delta,
+            };
+            ChangedTask {
+                orig: orig,
+                delta: new_delta,
+            }
+        })
+        .collect::<Vec<ChangedTask<Task>>>();
+
+    (new_tasks, matches)
+}
+
+pub fn compute_changeset(
+    from: Vec<Task>,
+    to: Vec<Task>,
+    allowed_divergence: usize,
+) -> (Vec<Task>, Vec<ChangedTask<Vec<Changes>>>) {
+    use self::TaskDelta::*;
+    let (new_tasks, matches) = match_tasks(from, to, allowed_divergence);
+
     let changes = matches
         .into_iter()
         .map(|ChangedTask { orig, delta }| {
@@ -426,20 +464,15 @@ pub fn compute_changeset(
                 Deleted => Deleted,
                 Changed(t) => Changed(changes_between(&orig, &t)),
                 Recurred(mut tasks) => {
-                    tasks.sort_by_key(|t| t.due_date);
                     let init_change = changes_between(&orig, &tasks[0]);
-                    if tasks.len() == 1 {
-                        Changed(init_change)
-                    } else {
-                        let rec_changes = tasks
-                            .into_iter()
-                            .tuple_windows()
-                            .map(|(t1, t2)| changes_between_rec(t1, t2, &orig));
-                        let all_changes = std::iter::once(init_change)
-                            .chain(rec_changes)
-                            .collect::<Vec<_>>();
-                        Recurred(all_changes)
-                    }
+                    let rec_changes = tasks
+                        .into_iter()
+                        .tuple_windows()
+                        .map(|(t1, t2)| changes_between_rec(t1, t2, &orig));
+                    let all_changes = std::iter::once(init_change)
+                        .chain(rec_changes)
+                        .collect::<Vec<_>>();
+                    Recurred(all_changes)
                 }
             };
             ChangedTask {

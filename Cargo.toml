@@ -25,5 +25,5 @@ integration_tests = ["serde", "serde_derive", "serde_yaml"]
 
 [[test]]
 name = "todiff"
-path = "tests/changeset_tests.rs"
+path = "tests/tests.rs"
 required-features = ["integration_tests"]

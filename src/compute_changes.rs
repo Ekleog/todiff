@@ -79,7 +79,7 @@ impl<T> TaskDelta<T> {
 pub enum Changes {
     Created,
     RecurredStrict,
-    RecurredFrom(TaskDate),
+    RecurredFrom(Option<TaskDate>),
 
     FinishedAt(TaskDate),
     PostponedStrictBy(Duration),
@@ -157,8 +157,7 @@ fn recur_task(from: &Task, recspec: &str) -> (Task, Changes) {
         let from_due = from.due_date;
         (from_due, Changes::RecurredStrict)
     } else {
-        //TODO: handle lack of finish date
-        (from_finish, Changes::RecurredFrom(from_finish.unwrap()))
+        (from_finish, Changes::RecurredFrom(from_finish))
     };
     let new_due = start_date.and_then(|d| add_recspec_to_date(d, &stripped_recspec));
     new_task.due_date = new_due;
@@ -247,9 +246,13 @@ pub fn changes_between(from: &Task, to: &Task) -> Vec<Changes> {
     res
 }
 
-fn changes_between_rec(from: &Task, to: &Task, orig: &Task) -> Vec<Changes> {
+fn changes_between_rec(mut from: Task, to: Task, orig: &Task) -> Vec<Changes> {
     let recspec = orig.tags.get("rec").unwrap();
-    let (mut virtual_task, recur_change) = recur_task(from, recspec);
+    // If the finish date of `from` was not recorded, infer it from `to`
+    if from.finished && from.finish_date == None {
+        from.finish_date = to.create_date;
+    }
+    let (mut virtual_task, recur_change) = recur_task(&from, recspec);
     // Work around priority being removed on completion
     if orig.priority < 26 {
         virtual_task.priority = orig.priority;
@@ -402,7 +405,7 @@ pub fn compute_changeset(
                         let rec_changes = tasks
                             .into_iter()
                             .tuple_windows()
-                            .map(|(t1, t2)| changes_between_rec(&t1, &t2, &orig));
+                            .map(|(t1, t2)| changes_between_rec(t1, t2, &orig));
                         let all_changes = std::iter::once(init_change)
                             .chain(rec_changes)
                             .collect::<Vec<_>>();

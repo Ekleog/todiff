@@ -2,7 +2,7 @@ use self::MergeResult::*;
 use compute_changes::TaskDelta::*;
 use compute_changes::*;
 use itertools::Itertools;
-use todo_txt::Task;
+use todo_txt::task::Extended as Task;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum MergeResult<T> {

@@ -17,7 +17,7 @@ use std::str::FromStr;
 use todiff::compute_changes::*;
 use todiff::display_changes::*;
 use todiff::merge_changes::*;
-use todo_txt::Task;
+use todo_txt::task::Extended as Task;
 
 fn tasks_from_strings(strings: Vec<String>) -> Vec<Task> {
     strings

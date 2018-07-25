@@ -5,7 +5,7 @@ use compute_changes::*;
 use diff;
 use itertools::Itertools;
 use std;
-use todo_txt::Task;
+use todo_txt::task::Extended as Task;
 
 fn is_recurred(c: &Changes) -> bool {
     use self::Changes::*;
@@ -172,7 +172,8 @@ pub fn display_changeset(
         .cloned()
         .chain(completed_new_tasks.into_iter().map(|x| {
             let mut chgs = vec![Changes::Created];
-            let u = uncomplete(&x);
+            let mut u = x.clone();
+            u.uncomplete();
             chgs.extend(changes_between(&u, &x));
             ChangedTask {
                 orig: u,

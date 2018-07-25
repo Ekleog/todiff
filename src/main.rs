@@ -10,7 +10,7 @@ use std::io::{BufRead, BufReader};
 use std::str::FromStr;
 use todiff::compute_changes::*;
 use todiff::display_changes::*;
-use todo_txt::Task;
+use todo_txt::task::Extended as Task;
 
 fn is_a_tty() -> bool {
     atty::is(atty::Stream::Stdout)

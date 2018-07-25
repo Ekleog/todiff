@@ -6,7 +6,7 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
 use todiff::merge_changes::*;
-use todo_txt::Task;
+use todo_txt::task::Extended as Task;
 
 fn read_tasks(path: &str) -> Vec<Task> {
     let file = File::open(path).expect(&format!("Unable to open file ‘{}’", path));

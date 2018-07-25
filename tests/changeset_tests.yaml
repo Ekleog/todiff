@@ -395,6 +395,42 @@ recurrence_tricky_date:
       -
         - RecurredStrict
 
+recurrence_strict_threshold:
+  allowed_divergence: 50
+  from:
+    - 2010-01-01 foo rec:+1d t:2010-01-02 due:2010-01-02
+
+  to:
+    - x 2010-01-01 2010-01-01 foo rec:+1d t:2010-01-02 due:2010-01-02
+    - 2010-01-01 foo rec:+1d t:2010-01-03 due:2010-01-03
+
+  new: []
+
+  changes:
+    - Recurred:
+      -
+        - FinishedAt(2010-01-01)
+      -
+        - RecurredStrict
+
+recurrence_nonstrict_threshold:
+  allowed_divergence: 50
+  from:
+    - 2010-01-01 foo rec:2d t:2010-01-02 due:2010-01-03
+
+  to:
+    - x 2010-01-02 2010-01-01 foo rec:2d t:2010-01-02 due:2010-01-03
+    - 2010-01-02 foo rec:2d t:2010-01-03 due:2010-01-04
+
+  new: []
+
+  changes:
+    - Recurred:
+      -
+        - FinishedAt(2010-01-02)
+      -
+        - RecurredFrom(Some(2010-01-02))
+
 recurrence_non_strict:
   allowed_divergence: 50
   from:

@@ -123,13 +123,23 @@ fn recur_task(from: &Task, rec: Recurrence) -> (Task, Changes) {
     new_task.uncomplete();
 
     let from_finish = from.finish_date;
-    let (start_date, change) = if rec.strict {
-        let from_due = from.due_date;
-        (from_due, Changes::RecurredStrict)
+    let change;
+    if rec.strict {
+        change = Changes::RecurredStrict;
+        new_task.due_date = from.due_date.map(|d| rec.clone() + d);
+        new_task.threshold_date = from.threshold_date.map(|d| rec + d);
     } else {
-        (from_finish, Changes::RecurredFrom(from_finish))
-    };
-    new_task.due_date = start_date.map(|d| rec + d);
+        change = Changes::RecurredFrom(from_finish);
+        new_task.due_date = from_finish.map(|d| rec + d);
+        match (from.due_date, from.threshold_date) {
+            (Some(from_due), Some(from_thresh)) => {
+                let delta = from_due.signed_duration_since(from_thresh);
+                new_task.threshold_date = new_task.due_date.map(|d| d - delta);
+            },
+            _ => {}
+        }
+    }
+
     if let Some(_) = from_finish {
         new_task.create_date = from_finish;
     }

@@ -4,9 +4,9 @@ use itertools::Itertools;
 use stable_marriage;
 use std;
 use strsim::levenshtein;
-use todo_txt::Date as TaskDate;
 use todo_txt::task::Extended as Task;
 use todo_txt::task::Recurrence;
+use todo_txt::Date as TaskDate;
 
 // These structs will be used in two stages: first with T=Task when matching tasks together,
 // and then with T=Vec<Changes> when computing actual deltas to be displayed
@@ -135,7 +135,7 @@ fn recur_task(from: &Task, rec: Recurrence) -> (Task, Changes) {
             (Some(from_due), Some(from_thresh)) => {
                 let delta = from_due.signed_duration_since(from_thresh);
                 new_task.threshold_date = new_task.due_date.map(|d| d - delta);
-            },
+            }
             _ => {}
         }
     }

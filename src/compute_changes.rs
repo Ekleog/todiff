@@ -406,7 +406,7 @@ pub fn compute_changeset(
                 Identical => Identical,
                 Deleted => Deleted,
                 Changed(t) => Changed(changes_between(&orig, &t)),
-                Recurred(mut tasks) => {
+                Recurred(tasks) => {
                     let init_change = changes_between(&orig, &tasks[0]);
                     let rec_changes = tasks
                         .into_iter()

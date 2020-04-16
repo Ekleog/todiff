@@ -366,9 +366,9 @@ dependencies = [
 
 [[package]]
 name = "serde_yaml"
-version = "0.7.5"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef8099d3df28273c99a1728190c7a9f19d444c941044f64adf986bee7ec53051"
+checksum = "1d58de5bf17f1e4ef9f12e774e00b2f11bd68579cff2d5918b6f79bf6f5270dd"
 dependencies = [
  "dtoa",
  "linked-hash-map",

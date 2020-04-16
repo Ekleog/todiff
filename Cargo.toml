@@ -11,7 +11,7 @@ clap = "2.33"
 diff = "0.1.11"
 itertools = "0.7.8"
 strsim = "0.7.0"
-todo-txt = { version = "1.2.0", features = ["extended"] }
+todo-txt = { version = "1.2", features = ["extended"] }
 serde = { version = "1.0", optional = true }
 serde_derive = { version = "1.0", optional = true }
 serde_yaml = { version = "0.7.5", optional = true }

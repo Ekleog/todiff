@@ -17,7 +17,7 @@ serde_derive = { version = "1.0", optional = true }
 serde_yaml = { version = "0.7.5", optional = true }
 
 [dev-dependencies]
-pretty_assertions = "0.5.1"
+pretty_assertions = "0.6.1"
 
 [features]
 default = []

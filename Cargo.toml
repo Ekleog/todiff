@@ -10,7 +10,7 @@ chrono = "0.4.19"
 clap = "2.33"
 diff = "0.1.11"
 itertools = "0.10.0"
-strsim = "0.7.0"
+strsim = "0.8.0"
 todo-txt = { version = "1.2", features = ["extended"] }
 serde = { version = "1.0", optional = true }
 serde_derive = { version = "1.0", optional = true }

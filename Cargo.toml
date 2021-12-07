@@ -9,7 +9,7 @@ atty = "0.2.8"
 chrono = "0.4.19"
 clap = "2.33"
 diff = "0.1.11"
-itertools = "0.10.1"
+itertools = "0.10.3"
 strsim = "0.10.0"
 todo-txt = { version = "2.1", features = ["extended"] }
 serde = { version = "1.0", optional = true }

@@ -8,7 +8,7 @@ ansi_term = "0.12.1"
 atty = "0.2.8"
 chrono = "0.4.19"
 clap = "2.33"
-diff = "0.1.11"
+diff = "0.1.13"
 itertools = "0.10.1"
 strsim = "0.10.0"
 todo-txt = { version = "2.1", features = ["extended"] }
